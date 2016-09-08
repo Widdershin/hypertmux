@@ -8,7 +8,3 @@ Why?
 ---
 
 Well, since I use console neovim as my editor, I pretty much live my life inside of a fullscreen tmux session. The only other necessary part of my development workflow is a browser. So I want one inside of tmux!
-
-How?
----
-<coming soon>
