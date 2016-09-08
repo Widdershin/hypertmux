@@ -2,6 +2,8 @@
 
 hypertmux is an experimental terminal emulator, designed to allow tmux users to be able to open web pages inside of tmux panes.
 
+My goal is to produce a standalone tmux client app, built on top of electron. Currently I have a prototype that runs in the browser.
+
 ![img](https://github.com/Widdershin/hypertmux/blob/master/example.gif?raw=true)
 
 Why?
