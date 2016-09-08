@@ -24,7 +24,7 @@ socketServer.on('connection', (socket) => {
 
   socket.on('message', (message) => {
     console.log('received:', JSON.stringify(message));
-    tmux.stdin.write('send-keys ' + JSON.stringify(message) + '\n');
+    tmux.stdin.write(message + '\n');
   });
 
   socket.on('close', () => {
