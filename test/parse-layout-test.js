@@ -99,8 +99,22 @@ describe('parseTmuxLayout', () => {
           width: 39 / 80 * 100,
           height: 100,
           children: [
-            {type: 'pane', columns: 39, rows: 12, width: 39 / 80 * 100, height: 12 / 24 * 100, number: 329},
-            {type: 'pane', columns: 39, rows: 11, width: 39 / 80 * 100, height: 11 / 24 * 100, number: 330}
+            {
+              type: 'pane',
+              columns: 39,
+              rows: 12,
+              width: 39 / 80 * 100,
+              height: 12 / 24 * 100,
+              number: 329
+            },
+            {
+              type: 'pane',
+              columns: 39,
+              rows: 11,
+              width: 39 / 80 * 100,
+              height: 11 / 24 * 100,
+              number: 330
+            }
           ]
         }
       ]

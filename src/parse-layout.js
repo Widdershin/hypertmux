@@ -15,18 +15,35 @@
 //      [ = vertical
 //      dimensions,x,y
 
-import chalk from 'chalk';
-
-function pretty (index, chars) {
-  return chars.map((char, charIndex) => charIndex === index ? chalk.green(char) : char).join('');
-}
-
 function cursor (state) {
   return ['output'].concat(state.cursor).reduce((state, key) => state[key], state);
 }
 
 function cursorParent (state) {
   return ['output'].concat(state.cursor).slice(0, -1).reduce((state, key) => state[key], state);
+}
+
+function add (state, data) {
+  if (state.cursor.length === 0) {
+    state.output = data;
+
+    if (data.type === 'container') {
+      state.cursor.push('children');
+    }
+
+    return state;
+  }
+
+  const childrenAtCursor = cursor(state);
+  const cursorLength = childrenAtCursor.push(data);
+
+  if (data.type === 'container') {
+    const newContainerIndex = cursorLength - 1;
+
+    state.cursor.push(newContainerIndex, 'children');
+  }
+
+  return state;
 }
 
 function flushCurrentValue (state) {
@@ -38,16 +55,16 @@ function flushCurrentValue (state) {
   return state;
 }
 
-function addContainer (orientation, state) {
+function openContainer (orientation, state) {
   state = flushCurrentValue(state);
 
   const [
-    dimensionsString,
-    xString,
-    yString
+    dimensions,
+    x,
+    y
   ] = state.values.splice(0, 3);
 
-  const [columns, rows] = dimensionsString.split('x').map(i => parseInt(i, 10));
+  const [columns, rows] = dimensions.split('x').map(i => parseInt(i, 10));
   const {width, height} = sizeRelativeToParent({columns, rows}, state);
 
   state = add(state, {
@@ -67,13 +84,13 @@ function buildSinglePane (state) {
   state = flushCurrentValue(state);
 
   const [
-    dimensionsString,
-    xString,
-    yString,
+    dimensions,
+    x,
+    y,
     paneNumber
   ] = state.values.splice(0, 4);
 
-  const [columns, rows] = dimensionsString.split('x').map(i => parseInt(i, 10));
+  const [columns, rows] = dimensions.split('x').map(i => parseInt(i, 10));
   const {width, height} = sizeRelativeToParent({columns, rows}, state);
 
   state = add(state, {
@@ -101,31 +118,6 @@ function closeContainer (state) {
   return state;
 }
 
-function add (state, data) {
-  if (state.cursor.length === 0) {
-    state.output = data;
-
-    if (data.type === 'container') {
-      state.cursor.push('children');
-    }
-
-    return state;
-  }
-
-  const cursorValue = cursor(state);
-
-  if (Array.isArray(cursorValue)) {
-    cursorValue.push(data);
-  }
-
-  if (data.type === 'container') {
-    state.cursor.push((cursorValue.length - 1).toString());
-    state.cursor.push('children');
-  }
-
-  return state;
-}
-
 function sizeRelativeToParent ({rows, columns}, state) {
   if (state.cursor.length === 0) {
     return {
@@ -142,48 +134,59 @@ function sizeRelativeToParent ({rows, columns}, state) {
   };
 }
 
-function parseLayoutChar (state, char, index, chars) {
-  if (false) {
-    console.log('input: ', JSON.stringify(char));
-    console.log(JSON.stringify(state, null, 2));
-    console.log(pretty(index, chars));
-  }
+function insideContainer (state) {
+  return state.cursor.length > 0;
+}
 
-  if (state.cursor.length > 0 && state.values.length === 4) {
+function readyToMakePane (state) {
+  return state.values.length === 4;
+}
+
+function parseLayoutCharacter (state, character) {
+  if (insideContainer(state) && readyToMakePane(state)) {
     state = buildSinglePane(state);
   }
 
-  if (char === ',') {
+  if (character === ',') {
     return flushCurrentValue(state);
   }
 
-  if (char === '\n' && state.values.length === 3) {
+  if (character === '\n' && state.values.length === 3) {
     return buildSinglePane(state);
   }
 
-  if (char === '{') {
-    return addContainer('row', state);
+  if (character === '{') {
+    return openContainer('row', state);
   }
 
-  if (char === '[') {
-    return addContainer('column', state);
+  if (character === '[') {
+    return openContainer('column', state);
   }
 
-  if (char === '}') {
+  if (character === '}') {
     return closeContainer(state);
   }
 
-  if (char === ']') {
+  if (character === ']') {
     return closeContainer(state);
   }
 
-  state.currentValue += char;
+  state.currentValue += character;
 
   return state;
 }
 
 export default function parseTmuxLayout (layoutString) {
   const [windowName, details] = layoutString.split(' ');
+
+  const detailsWithoutLayoutName = details
+    .split(',')
+    .slice(1)
+    .join(',');
+
+  const detailCharacters = detailsWithoutLayoutName
+    .split('')
+    .concat('\n');
 
   const initialState = {
     currentValue: '',
@@ -192,7 +195,7 @@ export default function parseTmuxLayout (layoutString) {
     cursor: []
   };
 
-  const outputState = details.split(',').slice(1).join(',').split('').concat('\n').reduce(parseLayoutChar, initialState);
-
-  return outputState.output;
+  return detailCharacters
+    .reduce(parseLayoutCharacter, initialState)
+    .output;
 }
