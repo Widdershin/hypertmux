@@ -48,7 +48,7 @@ function Pane (number, {rows, columns, width, height, x, y, element, pre, termin
     terminal,
 
     update ({rows, columns, width, height, x, y}) {
-      terminal.state.resize({columns, rows})
+      terminal.state.resize({columns, rows});
 
       element.style.width = `${width}vw`;
       element.style.height = `${height}vw`;
@@ -72,7 +72,6 @@ function Pane (number, {rows, columns, width, height, x, y, element, pre, termin
     write (input) {
       terminal.write(input);
 
-      console.log('writing to', number, JSON.stringify(input));
       pre.innerHTML = terminal.toString('html');
     },
 
@@ -100,10 +99,8 @@ function Window (number, name = null) {
 
 function makeOrUpdatePane (paneNumber, {rows, columns, width, height, x, y}) {
   if (!state.panes[paneNumber]) {
-    console.log('creating pane', paneNumber);
     state.panes[paneNumber] = Pane(paneNumber, {rows, columns, width, height, x, y});
   } else {
-    console.log('updating pane', paneNumber);
     state.panes[paneNumber] = state.panes[paneNumber].update({rows, columns, width, height, x, y});
   }
 
@@ -170,8 +167,6 @@ socket.onmessage = function (event) {
 
       const urlToOpen = /.*\033browse (.*)\033.*/.exec(line);
 
-      console.log(urlToOpen);
-
       const pane = state.panes[paneNumber];
 
       if (urlToOpen) {
@@ -218,4 +213,11 @@ document.addEventListener('keydown', (event) => {
   }
 
   socket.send('send-keys ' + keyToSend);
+});
+
+window.addEventListener('resize', (event) => {
+  const columns = Math.floor(window.innerWidth / 10); // this is a hack, (values precomputed for the font "Hack")
+  const rows = Math.floor(window.innerHeight / 20);
+
+  socket.send(`refresh-client -C ${columns},${rows}`);
 });

@@ -18,7 +18,6 @@ server.listen(3000);
 
 const socketServer = new ws.Server({server});
 
-
 socketServer.on('connection', (socket) => {
   const tmux = childProcess.spawn('tmux', ['-C'], {tmux: true});
 

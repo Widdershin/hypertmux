@@ -163,11 +163,7 @@ function parseLayoutCharacter (state, character) {
     return openContainer('column', state);
   }
 
-  if (character === '}') {
-    return closeContainer(state);
-  }
-
-  if (character === ']') {
+  if (character === '}' || character === ']') {
     return closeContainer(state);
   }
 
