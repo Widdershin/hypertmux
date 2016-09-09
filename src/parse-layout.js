@@ -14,12 +14,96 @@
 //      { = horizontal
 //      [ = vertical
 //      dimensions,x,y
-function parseLayoutChar (state, char) {
+
+import chalk from 'chalk';
+
+function pretty (index, chars) {
+  return chars.map((char, charIndex) => charIndex === index ? chalk.green(char) : char).join('');
+}
+
+function cursor (state) {
+  return ['output'].concat(state.cursor).reduce((state, key) => state[key], state);
+}
+
+function cursorParent (state) {
+  return ['output'].concat(state.cursor).slice(0, -1).reduce((state, key) => state[key], state);
+}
+
+function add (state, data) {
+  if (state.cursor.length === 0) {
+    state.output = data;
+
+    if (data.type === 'container') {
+      state.cursor.push('children');
+    }
+
+    return state;
+  }
+
+  const cursorValue = cursor(state);
+
+  if (Array.isArray(cursorValue)) {
+    cursorValue.push(data);
+  }
+
+  if (data.type === 'container') {
+    state.cursor.push((cursorValue.length - 1).toString());
+    state.cursor.push('children');
+  }
+
+  return state;
+}
+
+function sizeRelativeToParent ({rows, columns}, state) {
+  if (state.cursor.length === 0) {
+    return {
+      width: 100,
+      height: 100
+    };
+  }
+
+  const parent = cursorParent(state);
+
+  return {
+    width: columns / parent.columns * parent.width,
+    height: rows / parent.rows * parent.height
+  };
+}
+
+function parseLayoutChar (state, char, index, chars) {
+  if (false) {
+    console.log('input: ', JSON.stringify(char));
+    console.log(JSON.stringify(state, null, 2));
+    console.log(pretty(index, chars));
+  }
+
+  if (state.cursor.length > 0 && state.values.length === 4) {
+    const [
+      dimensionsString,
+      xString,
+      yString,
+      paneNumber
+    ] = state.values.splice(0, 4);
+
+    const [columns, rows] = dimensionsString.split('x').map(i => parseInt(i, 10));
+    const {width, height} = sizeRelativeToParent({columns, rows}, state);
+
+    state = add(state, {
+      type: 'pane',
+
+      columns,
+      rows,
+      width,
+      height,
+      number: parseInt(paneNumber, 10)
+    });
+  }
+
   if (char.match(/\w/)) {
     state.currentValue += char;
 
     return state;
-  };
+  }
 
   if (char === ',') {
     state.values.push(state.currentValue);
@@ -28,33 +112,29 @@ function parseLayoutChar (state, char) {
     return state;
   }
 
-  if (char === '\n') {
-    if (state.values.length === 0) {
-      return state;
-    }
-
+  if (char === '\n' && state.values.length === 3) {
     state.values.push(state.currentValue);
     state.currentValue = '';
 
     const [
-      layoutName,
       dimensionsString,
       xString,
       yString,
       paneNumber
     ] = state.values;
 
-    const [columns, rows] = dimensionsString.split('x');
+    const [columns, rows] = dimensionsString.split('x').map(i => parseInt(i, 10));
+    const {width, height} = sizeRelativeToParent({columns, rows}, state);
 
-    state.output = {
+    state = add(state, {
       type: 'pane',
 
       columns,
       rows,
-      width: 100,
-      height: 100,
+      width,
+      height,
       number: parseInt(paneNumber, 10)
-    };
+    });
 
     return state;
   }
@@ -64,30 +144,33 @@ function parseLayoutChar (state, char) {
     state.currentValue = '';
 
     const [
-      layoutName,
       dimensionsString,
       xString,
-      yString,
+      yString
     ] = state.values.splice(0, 4);
 
     const [columns, rows] = dimensionsString.split('x').map(i => parseInt(i, 10));
 
-    state.output = {
+    const {width, height} = sizeRelativeToParent({columns, rows}, state);
+
+    state = add(state, {
       type: 'container',
       direction: 'row',
       columns,
       rows,
-      width: 100,
-      height: 100,
+      width,
+      height,
       children: []
-    }
+    });
 
     return state;
   }
 
   if (char === '}') {
-    state.values.push(state.currentValue);
-    state.currentValue = '';
+    if (state.currentValue != '') {
+      state.values.push(state.currentValue);
+      state.currentValue = '';
+    }
 
     const numberOfPanes = state.values.length / 4;
 
@@ -104,18 +187,20 @@ function parseLayoutChar (state, char) {
       ] = paneValues;
 
       const [columns, rows] = dimensionsString.split('x').map(i => parseInt(i, 10));
+      const {width, height} = sizeRelativeToParent({columns, rows}, state);
 
-      state.output.children.push({
-        type: "pane",
+      state = add(state, {
+        type: 'pane',
         columns,
         rows,
         number: parseInt(paneNumber, 10),
-        width: columns / state.output.columns * 100,
-        height: rows / state.output.rows * 100
-      })
+        width: columns / cursorParent(state).columns * 100,
+        height: rows / cursorParent(state).rows * 100
+      });
 
       numberOfCreatedPanes++;
     }
+
     return state;
   }
 
@@ -124,30 +209,32 @@ function parseLayoutChar (state, char) {
     state.currentValue = '';
 
     const [
-      layoutName,
       dimensionsString,
       xString,
-      yString,
+      yString
     ] = state.values.splice(0, 4);
 
     const [columns, rows] = dimensionsString.split('x').map(i => parseInt(i, 10));
+    const {width, height} = sizeRelativeToParent({columns, rows}, state);
 
-    state.output = {
+    state = add(state, {
       type: 'container',
       direction: 'column',
       columns,
       rows,
-      width: 100,
-      height: 100,
+      width,
+      height,
       children: []
-    }
+    });
 
     return state;
   }
 
   if (char === ']') {
-    state.values.push(state.currentValue);
-    state.currentValue = '';
+    if (state.currentValue !== '') {
+      state.values.push(state.currentValue);
+      state.currentValue = '';
+    }
 
     const numberOfPanes = state.values.length / 4;
 
@@ -164,27 +251,28 @@ function parseLayoutChar (state, char) {
       ] = paneValues;
 
       const [columns, rows] = dimensionsString.split('x').map(i => parseInt(i, 10));
+      const {width, height} = sizeRelativeToParent({columns, rows}, state);
 
-      state.output.children.push({
-        type: "pane",
+      state = add(state, {
+        type: 'pane',
         columns,
         rows,
         number: parseInt(paneNumber, 10),
-        width: columns / state.output.columns * 100,
-        height: rows / state.output.rows * 100
-      })
+        width,
+        height
+      });
 
       numberOfCreatedPanes++;
     }
+
     return state;
   }
 
+  if (char === '\n')
+    return state;
+
   throw new Error(`Unhandled character "${char}"`);
 }
-
-// reduce each char in layout details
-//   break up into sections
-//   assign to stuff
 
 export default function parseTmuxLayout (layoutString) {
   const [windowName, details] = layoutString.split(' ');
@@ -192,10 +280,11 @@ export default function parseTmuxLayout (layoutString) {
   const initialState = {
     currentValue: '',
     values: [],
-    ouput: {}
-  }
+    output: {},
+    cursor: []
+  };
 
-  const outputState = details.split('').concat('\n').reduce(parseLayoutChar, initialState);
+  const outputState = details.split(',').slice(1).join(',').split('').concat('\n').reduce(parseLayoutChar, initialState);
 
   return outputState.output;
 }

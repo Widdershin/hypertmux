@@ -33,7 +33,6 @@ describe('parseTmuxLayout', () => {
     assert.deepEqual(parseTmuxLayout(input), output);
   });
 
-  /**/
   it('parses a layout with a horizontal split', () => {
     const input = '@165 2c52,80x24,0,0{40x24,0,0,313,39x24,41,0,314}';
 
@@ -72,8 +71,9 @@ describe('parseTmuxLayout', () => {
     assert.deepEqual(parseTmuxLayout(input), output);
   });
 
+  /**/
   it('parses a layout with a vertical split nested in a horizontal split', () => {
-    const input = '447b,80x24,0,0{40x24,0,0,328,39x24,41,0[39x12,41,0,329,39x11,41,13,330]}';
+    const input = '@143 447b,80x24,0,0{40x24,0,0,328,39x24,41,0[39x12,41,0,329,39x11,41,13,330]}';
 
     const output = {
       type: 'container',
@@ -99,8 +99,8 @@ describe('parseTmuxLayout', () => {
           width: 39 / 80 * 100,
           height: 100,
           children: [
-            {type: 'pane', columns: 39, rows: 12, width: 50, height: 12 / 24 * 100, number: 329},
-            {type: 'pane', columns: 39, rows: 11, width: 50, height: 11 / 24 * 100, number: 330}
+            {type: 'pane', columns: 39, rows: 12, width: 39 / 80 * 100, height: 12 / 24 * 100, number: 329},
+            {type: 'pane', columns: 39, rows: 11, width: 39 / 80 * 100, height: 11 / 24 * 100, number: 330}
           ]
         }
       ]
