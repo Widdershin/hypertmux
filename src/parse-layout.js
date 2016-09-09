@@ -29,6 +29,78 @@ function cursorParent (state) {
   return ['output'].concat(state.cursor).slice(0, -1).reduce((state, key) => state[key], state);
 }
 
+function flushCurrentValue (state) {
+  if (state.currentValue !== '') {
+    state.values.push(state.currentValue);
+    state.currentValue = '';
+  }
+
+  return state;
+}
+
+function addContainer (orientation, state) {
+  state = flushCurrentValue(state);
+
+  const [
+    dimensionsString,
+    xString,
+    yString
+  ] = state.values.splice(0, 3);
+
+  const [columns, rows] = dimensionsString.split('x').map(i => parseInt(i, 10));
+  const {width, height} = sizeRelativeToParent({columns, rows}, state);
+
+  state = add(state, {
+    type: 'container',
+    direction: orientation,
+    columns,
+    rows,
+    width,
+    height,
+    children: []
+  });
+
+  return state;
+}
+
+function buildSinglePane (state) {
+  state = flushCurrentValue(state);
+
+  const [
+    dimensionsString,
+    xString,
+    yString,
+    paneNumber
+  ] = state.values.splice(0, 4);
+
+  const [columns, rows] = dimensionsString.split('x').map(i => parseInt(i, 10));
+  const {width, height} = sizeRelativeToParent({columns, rows}, state);
+
+  state = add(state, {
+    type: 'pane',
+
+    columns,
+    rows,
+    width,
+    height,
+    number: parseInt(paneNumber, 10)
+  });
+
+  return state;
+}
+
+function closeContainer (state) {
+  state = flushCurrentValue(state);
+
+  while (state.values.length > 0) {
+    state = buildSinglePane(state);
+  }
+
+  state.cursor = state.cursor.slice(0, -2);
+
+  return state;
+}
+
 function add (state, data) {
   if (state.cursor.length === 0) {
     state.output = data;
@@ -78,200 +150,36 @@ function parseLayoutChar (state, char, index, chars) {
   }
 
   if (state.cursor.length > 0 && state.values.length === 4) {
-    const [
-      dimensionsString,
-      xString,
-      yString,
-      paneNumber
-    ] = state.values.splice(0, 4);
-
-    const [columns, rows] = dimensionsString.split('x').map(i => parseInt(i, 10));
-    const {width, height} = sizeRelativeToParent({columns, rows}, state);
-
-    state = add(state, {
-      type: 'pane',
-
-      columns,
-      rows,
-      width,
-      height,
-      number: parseInt(paneNumber, 10)
-    });
-  }
-
-  if (char.match(/\w/)) {
-    state.currentValue += char;
-
-    return state;
+    state = buildSinglePane(state);
   }
 
   if (char === ',') {
-    state.values.push(state.currentValue);
-    state.currentValue = '';
-
-    return state;
+    return flushCurrentValue(state);
   }
 
   if (char === '\n' && state.values.length === 3) {
-    state.values.push(state.currentValue);
-    state.currentValue = '';
-
-    const [
-      dimensionsString,
-      xString,
-      yString,
-      paneNumber
-    ] = state.values;
-
-    const [columns, rows] = dimensionsString.split('x').map(i => parseInt(i, 10));
-    const {width, height} = sizeRelativeToParent({columns, rows}, state);
-
-    state = add(state, {
-      type: 'pane',
-
-      columns,
-      rows,
-      width,
-      height,
-      number: parseInt(paneNumber, 10)
-    });
-
-    return state;
+    return buildSinglePane(state);
   }
 
   if (char === '{') {
-    state.values.push(state.currentValue);
-    state.currentValue = '';
-
-    const [
-      dimensionsString,
-      xString,
-      yString
-    ] = state.values.splice(0, 4);
-
-    const [columns, rows] = dimensionsString.split('x').map(i => parseInt(i, 10));
-
-    const {width, height} = sizeRelativeToParent({columns, rows}, state);
-
-    state = add(state, {
-      type: 'container',
-      direction: 'row',
-      columns,
-      rows,
-      width,
-      height,
-      children: []
-    });
-
-    return state;
-  }
-
-  if (char === '}') {
-    if (state.currentValue != '') {
-      state.values.push(state.currentValue);
-      state.currentValue = '';
-    }
-
-    const numberOfPanes = state.values.length / 4;
-
-    let numberOfCreatedPanes = 0;
-
-    while (numberOfCreatedPanes < numberOfPanes) {
-      const paneValues = state.values.splice(0, 4);
-
-      const [
-        dimensionsString,
-        xString,
-        yString,
-        paneNumber
-      ] = paneValues;
-
-      const [columns, rows] = dimensionsString.split('x').map(i => parseInt(i, 10));
-      const {width, height} = sizeRelativeToParent({columns, rows}, state);
-
-      state = add(state, {
-        type: 'pane',
-        columns,
-        rows,
-        number: parseInt(paneNumber, 10),
-        width: columns / cursorParent(state).columns * 100,
-        height: rows / cursorParent(state).rows * 100
-      });
-
-      numberOfCreatedPanes++;
-    }
-
-    return state;
+    return addContainer('row', state);
   }
 
   if (char === '[') {
-    state.values.push(state.currentValue);
-    state.currentValue = '';
+    return addContainer('column', state);
+  }
 
-    const [
-      dimensionsString,
-      xString,
-      yString
-    ] = state.values.splice(0, 4);
-
-    const [columns, rows] = dimensionsString.split('x').map(i => parseInt(i, 10));
-    const {width, height} = sizeRelativeToParent({columns, rows}, state);
-
-    state = add(state, {
-      type: 'container',
-      direction: 'column',
-      columns,
-      rows,
-      width,
-      height,
-      children: []
-    });
-
-    return state;
+  if (char === '}') {
+    return closeContainer(state);
   }
 
   if (char === ']') {
-    if (state.currentValue !== '') {
-      state.values.push(state.currentValue);
-      state.currentValue = '';
-    }
-
-    const numberOfPanes = state.values.length / 4;
-
-    let numberOfCreatedPanes = 0;
-
-    while (numberOfCreatedPanes < numberOfPanes) {
-      const paneValues = state.values.splice(0, 4);
-
-      const [
-        dimensionsString,
-        xString,
-        yString,
-        paneNumber
-      ] = paneValues;
-
-      const [columns, rows] = dimensionsString.split('x').map(i => parseInt(i, 10));
-      const {width, height} = sizeRelativeToParent({columns, rows}, state);
-
-      state = add(state, {
-        type: 'pane',
-        columns,
-        rows,
-        number: parseInt(paneNumber, 10),
-        width,
-        height
-      });
-
-      numberOfCreatedPanes++;
-    }
-
-    return state;
+    return closeContainer(state);
   }
 
-  if (char === '\n')
-    return state;
+  state.currentValue += char;
 
-  throw new Error(`Unhandled character "${char}"`);
+  return state;
 }
 
 export default function parseTmuxLayout (layoutString) {
