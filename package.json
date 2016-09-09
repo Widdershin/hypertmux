@@ -2,11 +2,11 @@
   "name": "cycle-tmux",
   "version": "1.0.0",
   "description": "",
-  "main": "index.js",
+  "main": "lib/index.js",
   "scripts": {
     "test": "mocha --compilers js:babel-core/register",
     "test/auto": "mocha --compilers js:babel-core/register --watch -R min",
-    "start": "babel-node server.js"
+    "start": "browserify client.js -t babelify -o static/bundle.js && babel index.js -o lib/index.js && electron ."
   },
   "keywords": [],
   "author": "",

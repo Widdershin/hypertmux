@@ -25,7 +25,7 @@ function Pane (number, {rows, columns, width, height, x, y, element, pre, termin
     });
 
     element.style.width = `${width}vw`;
-    element.style.height = `${height}vw`;
+    element.style.height = `${height}vh`;
   }
 
   if (!terminal) {
@@ -51,7 +51,7 @@ function Pane (number, {rows, columns, width, height, x, y, element, pre, termin
       terminal.state.resize({columns, rows});
 
       element.style.width = `${width}vw`;
-      element.style.height = `${height}vw`;
+      element.style.height = `${height}vh`;
 
       return Pane(
         number,
@@ -76,7 +76,7 @@ function Pane (number, {rows, columns, width, height, x, y, element, pre, termin
     },
 
     browse (url) {
-      const iframe = document.createElement('iframe');
+      const iframe = document.createElement('webview');
       iframe.src = url;
 
       pre.style.display = 'none';
@@ -162,7 +162,7 @@ socket.onmessage = function (event) {
     if (line.startsWith("%output")) {
       const paneNumber = findPaneNumber(line)
       line = line.replace(/%output %\d+ /, '');
-      line = line.replace(/\\(\d+)/g, (_, match) => String.fromCharCode(parseInt(match, 8)))
+      line = line.replace(/\\(\d{3})/g, (_, match) => String.fromCharCode(parseInt(match, 8)))
       line = line.replace(/\033k\w+/, '');
 
       const urlToOpen = /.*\033browse (.*)\033.*/.exec(line);
