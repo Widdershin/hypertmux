@@ -4,23 +4,31 @@ import xs from 'xstream';
 import Terminal from 'terminal.js';
 import parseTmuxLayout from './src/parse-layout';
 import _ from 'lodash';
+import fromEvent from 'xstream/extra/fromEvent';
+import debounce from 'xstream/extra/debounce';
+
+function resizeDriver () {
+  return fromEvent(window, 'resize');
+}
 
 function tmuxDriver (sink$, streamAdapter) {
   const socket = new WebSocket('ws://localhost:3000');
   const {observer, stream} = streamAdapter.makeSubject();
 
-  sink$.addListener({
-    next (message) {
-      socket.send(message);
-    },
+  socket.onopen = function passStreamToWebsocket () {
+    sink$.addListener({
+      next (message) {
+        socket.send(message);
+      },
 
-    error (err) {
-      throw err;
-    },
+      error (err) {
+        throw err;
+      },
 
-    complete () {
-    }
-  });
+      complete () {
+      }
+    });
+  }
 
   socket.onmessage = function passMessageToStream (message) {
     message.data
@@ -68,7 +76,6 @@ const reducers = {
     }
 
     terminal.write(action.output);
-    state.activeTerminal = action.paneNumber;
 
     return state;
   },
@@ -108,7 +115,7 @@ function update (state, action) {
   return reducers[action.type](state, action);
 }
 
-function main ({DOM, Tmux}) {
+function main ({DOM, Tmux, Resize}) {
   const outputAction$ = Tmux
     .filter(message => message.startsWith('%output'))
     .map(outputMessageToAction);
@@ -134,9 +141,19 @@ function main ({DOM, Tmux}) {
     .events('keydown')
     .map(parseInputEvent);
 
+  const resize$ = Resize
+    .compose(debounce(250))
+    .startWith({}) // calculate initial size
+    .map(updateTerminalSize);
+
+  const messagesToTmux$ = xs.merge(
+    input$,
+    resize$
+  );
+
   return {
     DOM: state$.map(view),
-    Tmux: input$
+    Tmux: messagesToTmux$
   };
 }
 
@@ -221,6 +238,13 @@ function renderContainer (state, container) {
   );
 }
 
+function updateTerminalSize () {
+  const columns = Math.floor(window.innerWidth / 10); // this is a hack, (values precomputed for the font "Hack")
+  const rows = Math.floor(window.innerHeight / 20);
+
+  return `refresh-client -C ${columns},${rows}`;
+}
+
 function parseInputEvent (event) {
   event.preventDefault();
 
@@ -259,7 +283,8 @@ function parseInputEvent (event) {
 
 const drivers = {
   DOM: makeDOMDriver('.app'),
-  Tmux: tmuxDriver
+  Tmux: tmuxDriver,
+  Resize: resizeDriver
 };
 
 run(main, drivers);
