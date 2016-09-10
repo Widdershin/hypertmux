@@ -61,6 +61,8 @@ const reducers = {
   }
 };
 
+
+
 function update (state, action) {
   if (!reducers[action.type]) {
     throw new Error('write a reducer for ' + action.type);
@@ -80,7 +82,7 @@ function main ({DOM, Tmux}) {
   // windows: {windowNumber => windowInfo}
   // terminals: {paneNumber => terminal}
   // layout
-  //
+
   const initialState = {
     terminals: {},
     activeTerminal: null
@@ -92,12 +94,54 @@ function main ({DOM, Tmux}) {
 
   const state$ = action$.fold(update, initialState);
 
+  const input$ = DOM
+    .select('document')
+    .events('keydown')
+    .map(parseInputEvent);
+
   return {
     DOM: state$.map(
       state => state.activeTerminal ? pre({props: {innerHTML: state.terminals[state.activeTerminal].toString('html') }}) : pre(JSON.stringify(state, null, 2))
     ),
-    Tmux: xs.empty()
+
+    Tmux: input$
   };
+}
+
+function parseInputEvent (event) {
+  event.preventDefault();
+
+  let keyToSend = event.key;
+
+  if (keyToSend === 'Backspace') {
+    keyToSend = 'BSpace';
+  }
+
+  if (keyToSend === ' ') {
+    keyToSend = 'Space';
+  }
+
+  if (keyToSend === "'") {
+    keyToSend = '\"\'\"';
+  }
+
+  if (keyToSend === '"') {
+    keyToSend = '\'\"\'';
+  }
+
+  if (keyToSend === 'Control' || keyToSend === 'Shift') {
+    return;
+  }
+
+  if (keyToSend.startsWith('Arrow')) {
+    keyToSend = keyToSend.replace('Arrow', '');
+  }
+
+  if (event.ctrlKey) {
+    keyToSend = `C-${keyToSend}`;
+  }
+
+  return `send-keys ${keyToSend}`;
 }
 
 const drivers = {
