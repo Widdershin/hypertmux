@@ -136,6 +136,11 @@ function main ({DOM, Tmux, Resize}) {
 
   const state$ = action$.fold(update, initialState);
 
+  const focusPane$ = DOM
+    .select('.pane')
+    .events('click')
+    .map(focusPane);
+
   const input$ = DOM
     .select('document')
     .events('keydown')
@@ -148,7 +153,8 @@ function main ({DOM, Tmux, Resize}) {
 
   const messagesToTmux$ = xs.merge(
     input$,
-    resize$
+    resize$,
+    focusPane$
   );
 
   return {
@@ -185,6 +191,9 @@ function renderPane (state, pane) {
     pre('.pane', {
       key: `pane-${pane.number}`,
       style,
+      attrs: {
+        'data-number': pane.number
+      },
       props: {
         innerHTML: state.terminals[pane.number].toString('html')
       }
@@ -243,6 +252,12 @@ function updateTerminalSize () {
   const rows = Math.floor(window.innerHeight / 20);
 
   return `refresh-client -C ${columns},${rows}`;
+}
+
+function focusPane (event) {
+  const paneNumber = event.currentTarget.dataset.number;
+
+  return `select-pane -t %${paneNumber}`;
 }
 
 function parseInputEvent (event) {
