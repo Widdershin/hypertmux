@@ -19,6 +19,14 @@ pre {
   line-height: 20px;
 }
 
+pre div {
+  margin: -1px 0px;
+}
+
+pre span {
+  margin: 0px -0.1px;
+}
+
 .active {
   border: 1px solid rebeccapurple;
 }
