@@ -337,6 +337,10 @@ function focusPane (event) {
 }
 
 function sanitizeSendKeys (keyToSend) {
+  if (keyToSend === '$') {
+    return '"\\$"';
+  }
+
   const charactersToSanitize = [
     '#',
     "'",

@@ -27,7 +27,7 @@ function createWindow () {
     const tmux = childProcess.spawn('tmux', ['-C'], {tmux: true});
 
     socket.on('message', (message) => {
-      console.log('received:', JSON.stringify(message));
+      console.log('received:', message);
       tmux.stdin.write(message + '\n');
     });
 
