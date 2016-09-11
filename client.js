@@ -2,10 +2,24 @@ import {run} from '@cycle/xstream-run';
 import {makeDOMDriver, pre, div} from '@cycle/dom';
 import xs from 'xstream';
 import Terminal from 'terminal.js';
-import parseTmuxLayout from './src/parse-layout';
 import _ from 'lodash';
 import fromEvent from 'xstream/extra/fromEvent';
 import debounce from 'xstream/extra/debounce';
+import dropRepeats from 'xstream/extra/dropRepeats';
+
+import parseTmuxLayout from './src/parse-layout';
+import parseBinds from './src/parse-binds';
+
+const BINDS = parseBinds(`
+bind-key    -T root   C-h              run-shell "(tmux display-message -p '#{pane_current_command}' | grep -iq vim && tmux send-keys C-h) || tmux select-pane -L"
+bind-key    -T root   C-j              run-shell "(tmux display-message -p '#{pane_current_command}' | grep -iq vim && tmux send-keys C-j) || tmux select-pane -D"
+bind-key    -T root   C-k              run-shell "(tmux display-message -p '#{pane_current_command}' | grep -iq vim && tmux send-keys C-k) || tmux select-pane -U"
+bind-key    -T root   C-l              run-shell "(tmux display-message -p '#{pane_current_command}' | grep -iq vim && tmux send-keys C-l) || tmux select-pane -R"
+bind-key    -T prefix %                split-window -h
+bind-key    -T prefix "                split-window
+bind-key    -T prefix o                resize-pane -Z
+bind-key    -T prefix x                confirm-before -p "kill-pane #P? (y/n)" kill-pane
+`);
 
 function resizeDriver () {
   return fromEvent(window, 'resize');
@@ -67,6 +81,18 @@ function updateLayoutToAction (message) {
   };
 }
 
+function keyEventToAction (event) {
+  const key = parseInputEvent(event);
+
+  return {
+    type: 'KEY_INPUT',
+
+    key,
+
+    isLeader: key === 'C-Space'
+  };
+}
+
 const reducers = {
   OUTPUT (state, action) {
     let terminal = state.terminals[action.paneNumber];
@@ -96,6 +122,45 @@ const reducers = {
     });
 
     return state;
+  },
+
+  KEY_INPUT (state, action) {
+    if (action.isLeader) {
+      state.leaderPressed = true;
+
+      return state;
+    }
+
+    const bind = BINDS.find(bind => {
+      const rightKey = bind.key === action.key;
+      const root = bind.type === 'root';
+      const leader = state.leaderPressed && bind.type === 'prefix';
+
+      return rightKey && (root || leader);
+    });
+
+    if (bind) {
+      return Object.assign({}, state, {
+        messageCount: state.messageCount + 1,
+
+        messages: [
+          bind.command
+        ],
+
+        leaderPressed: false
+      });
+    }
+
+    if (action.key === undefined) {
+      return state;
+    }
+
+    return Object.assign({}, state, {
+      messageCount: state.messageCount + 1,
+      messages: [
+        `send-keys ${sanitizeSendKeys(action.key)}`
+      ]
+    }); //so that drop repeats can tell when new messages happen
   }
 };
 
@@ -124,14 +189,23 @@ function main ({DOM, Tmux, Resize}) {
     .filter(message => message.startsWith('%layout-change'))
     .map(updateLayoutToAction);
 
+  const keydownAction$ = DOM
+    .select('document')
+    .events('keydown')
+    .map(keyEventToAction);
+
   const initialState = {
     terminals: {},
-    layout: null
+    layout: null,
+    leaderPressed: false,
+    messages: [],
+    messageCount: 0
   };
 
   const action$ = xs.merge(
     outputAction$,
-    updateLayoutAction$
+    updateLayoutAction$,
+    keydownAction$
   );
 
   const state$ = action$.fold(update, initialState);
@@ -141,20 +215,21 @@ function main ({DOM, Tmux, Resize}) {
     .events('click')
     .map(focusPane);
 
-  const input$ = DOM
-    .select('document')
-    .events('keydown')
-    .map(parseInputEvent);
-
   const resize$ = Resize
     .compose(debounce(250))
     .startWith({}) // calculate initial size
     .map(updateTerminalSize);
 
+  const messagesFromState$ = state$
+    .compose(dropRepeats((a, b) => a.messageCount === b.messageCount))
+    .map(state => state.messages)
+    .map(xs.fromArray)
+    .flatten();
+
   const messagesToTmux$ = xs.merge(
-    input$,
     resize$,
-    focusPane$
+    focusPane$,
+    messagesFromState$
   );
 
   return {
@@ -260,6 +335,18 @@ function focusPane (event) {
   return `select-pane -t %${paneNumber}`;
 }
 
+function sanitizeSendKeys (keyToSend) {
+  if (keyToSend === "'") {
+    keyToSend = '"\'"';
+  }
+
+  if (keyToSend === '"') {
+    keyToSend = "'\"'";
+  }
+
+  return keyToSend;
+}
+
 function parseInputEvent (event) {
   event.preventDefault();
 
@@ -273,15 +360,7 @@ function parseInputEvent (event) {
     keyToSend = 'Space';
   }
 
-  if (keyToSend === "'") {
-    keyToSend = '\"\'\"';
-  }
-
-  if (keyToSend === '"') {
-    keyToSend = '\'\"\'';
-  }
-
-  if (keyToSend === 'Control' || keyToSend === 'Shift') {
+  if (keyToSend === 'Control' || keyToSend === 'Shift' || keyToSend === 'Meta') {
     return;
   }
 
@@ -293,7 +372,11 @@ function parseInputEvent (event) {
     keyToSend = `C-${keyToSend}`;
   }
 
-  return `send-keys ${keyToSend}`;
+  if (event.metaKey) {
+    keyToSend = `M-${keyToSend}`;
+  }
+
+  return keyToSend;
 }
 
 const drivers = {
