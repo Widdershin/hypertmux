@@ -159,7 +159,8 @@ const reducers = {
       messageCount: state.messageCount + 1,
       messages: [
         `send-keys ${sanitizeSendKeys(action.key)}`
-      ]
+      ],
+      leaderPressed: false
     }); //so that drop repeats can tell when new messages happen
   }
 };
@@ -323,8 +324,8 @@ function renderContainer (state, container) {
 }
 
 function updateTerminalSize () {
-  const columns = Math.floor(window.innerWidth / 10); // this is a hack, (values precomputed for the font "Hack")
-  const rows = Math.floor(window.innerHeight / 20);
+  const columns = Math.floor(window.innerWidth / 9.6); // this is a hack, (values precomputed for the font "Hack")
+  const rows = Math.floor(window.innerHeight / 18.9);
 
   return `refresh-client -C ${columns},${rows}`;
 }
@@ -336,15 +337,17 @@ function focusPane (event) {
 }
 
 function sanitizeSendKeys (keyToSend) {
-  if (keyToSend === "'") {
-    keyToSend = '"\'"';
+  const charactersToSanitize = [
+    '#',
+    "'",
+    '"'
+  ];
+
+  if (!charactersToSanitize.includes(keyToSend)) {
+    return keyToSend;
   }
 
-  if (keyToSend === '"') {
-    keyToSend = "'\"'";
-  }
-
-  return keyToSend;
+  return JSON.stringify(keyToSend);
 }
 
 function parseInputEvent (event) {
