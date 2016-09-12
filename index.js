@@ -16,7 +16,7 @@ function createWindow () {
   win.loadURL(`file://${__dirname}/../index.html`);
 
   // Open the DevTools.
-  win.webContents.openDevTools();
+  // win.webContents.openDevTools();
 
   server = http.createServer();
   server.listen(3000);
@@ -38,7 +38,7 @@ function createWindow () {
     });
 
     tmux.stdout.on('data', (data) => {
-      // console.log('tmux:', data);
+      console.log('tmux:', data);
 
       socket.send(data.toString('utf8'));
     });
