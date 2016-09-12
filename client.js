@@ -10,17 +10,6 @@ import dropRepeats from 'xstream/extra/dropRepeats';
 import parseTmuxLayout from './src/parse-layout';
 import parseBinds from './src/parse-binds';
 
-const BINDS = parseBinds(`
-bind-key    -T root   C-h              run-shell "(tmux display-message -p '#{pane_current_command}' | grep -iq vim && tmux send-keys C-h) || tmux select-pane -L"
-bind-key    -T root   C-j              run-shell "(tmux display-message -p '#{pane_current_command}' | grep -iq vim && tmux send-keys C-j) || tmux select-pane -D"
-bind-key    -T root   C-k              run-shell "(tmux display-message -p '#{pane_current_command}' | grep -iq vim && tmux send-keys C-k) || tmux select-pane -U"
-bind-key    -T root   C-l              run-shell "(tmux display-message -p '#{pane_current_command}' | grep -iq vim && tmux send-keys C-l) || tmux select-pane -R"
-bind-key    -T prefix %                split-window -h -c #{pane_current_path}
-bind-key    -T prefix "                split-window -c #{pane_current_path}
-bind-key    -T prefix o                resize-pane -Z
-bind-key    -T prefix x                confirm-before -p "kill-pane #P? (y/n)" kill-pane
-`);
-
 function resizeDriver () {
   return fromEvent(window, 'resize');
 }
@@ -42,9 +31,15 @@ function tmuxDriver (sink$, streamAdapter) {
       complete () {
       }
     });
-  }
+  };
 
   socket.onmessage = function passMessageToStream (message) {
+    if (message.data.startsWith('%update-binds')) {
+      observer.next(message.data);
+
+      return;
+    }
+
     message.data
       .split('\n')
       .filter(message => message.length > 0)
@@ -61,7 +56,7 @@ function readyOutput (output) {
 }
 
 function outputMessageToAction (message) {
-  const [_, paneNumber, ...output] = message.split(' ');
+  const [_, paneNumber, ...output] = message.split(' '); // eslint-disable-line no-unused-vars
 
   return {
     type: 'OUTPUT',
@@ -72,12 +67,22 @@ function outputMessageToAction (message) {
 }
 
 function updateLayoutToAction (message) {
-  const [_, ...layoutDetails] = message.split(' ');
+  const [_, ...layoutDetails] = message.split(' '); // eslint-disable-line no-unused-vars
 
   return {
     type: 'UPDATE_LAYOUT',
 
     newLayout: parseTmuxLayout(layoutDetails.join(' '))
+  };
+}
+
+function updateBindsToAction (message) {
+  message = message.replace('%update-binds ');
+
+  return {
+    type: 'UPDATE_BINDS',
+
+    newBinds: parseBinds(message)
   };
 }
 
@@ -131,7 +136,7 @@ const reducers = {
       return state;
     }
 
-    const bind = BINDS.find(bind => {
+    const bind = state.binds.find(bind => {
       const rightKey = bind.key === action.key;
       const root = bind.type === 'root';
       const leader = state.leaderPressed && bind.type === 'prefix';
@@ -161,7 +166,13 @@ const reducers = {
         `send-keys ${sanitizeSendKeys(action.key)}`
       ],
       leaderPressed: false
-    }); //so that drop repeats can tell when new messages happen
+    });
+  },
+
+  UPDATE_BINDS (state, action) {
+    state.binds = action.newBinds;
+
+    return state;
   }
 };
 
@@ -190,6 +201,10 @@ function main ({DOM, Tmux, Resize}) {
     .filter(message => message.startsWith('%layout-change'))
     .map(updateLayoutToAction);
 
+  const updateBindsAction$ = Tmux
+    .filter(message => message.startsWith('%update-binds'))
+    .map(updateBindsToAction);
+
   const keydownAction$ = DOM
     .select('document')
     .events('keydown')
@@ -200,12 +215,14 @@ function main ({DOM, Tmux, Resize}) {
     layout: null,
     leaderPressed: false,
     messages: [],
-    messageCount: 0
+    messageCount: 0,
+    binds: []
   };
 
   const action$ = xs.merge(
     outputAction$,
     updateLayoutAction$,
+    updateBindsAction$,
     keydownAction$
   );
 

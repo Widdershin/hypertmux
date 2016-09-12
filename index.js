@@ -26,6 +26,8 @@ function createWindow () {
   socketServer.on('connection', (socket) => {
     const tmux = childProcess.spawn('tmux', ['-C'], {tmux: true});
 
+    socket.send('%update-binds ' + childProcess.execSync('tmux list-keys').toString('utf-8'));
+
     socket.on('message', (message) => {
       console.log('received:', message);
       tmux.stdin.write(message + '\n');
