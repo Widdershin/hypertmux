@@ -271,7 +271,7 @@ function renderPane (state, pane) {
         'data-number': pane.number
       },
       props: {
-        innerHTML: state.terminals[pane.number].toString('html')
+        innerHTML: state.terminals[pane.number].toString('html', {cursorBg: '#eee'})
       }
     })
   );
