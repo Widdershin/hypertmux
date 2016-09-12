@@ -1,8 +1,10 @@
 import {run} from '@cycle/xstream-run';
 import {makeDOMDriver, pre, div} from '@cycle/dom';
-import xs from 'xstream';
+
 import Terminal from 'terminal.js';
 import _ from 'lodash';
+
+import xs from 'xstream';
 import fromEvent from 'xstream/extra/fromEvent';
 import debounce from 'xstream/extra/debounce';
 import dropRepeats from 'xstream/extra/dropRepeats';
