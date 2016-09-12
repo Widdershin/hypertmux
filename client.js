@@ -1,5 +1,5 @@
 import {run} from '@cycle/xstream-run';
-import {makeDOMDriver, pre, div} from '@cycle/dom';
+import {makeDOMDriver, pre, div, h, input, button} from '@cycle/dom';
 
 import Terminal from 'terminal.js';
 import _ from 'lodash';
@@ -100,12 +100,44 @@ function keyEventToAction (event) {
   };
 }
 
+function closeBrowserEventToAction (event) {
+  const browserElement = findParent(event.target, '.browser');
+  const paneNumber = browserElement.dataset.number;
+
+  return {
+    type: 'CLOSE_BROWSER',
+
+    paneNumber
+  }
+}
+
+function findParent (element, className) {
+  if (!element.parentElement) {
+    return null;
+  }
+
+  if (element.parentElement.classList.contains(className.replace(/^\./, ''))) {
+    return element.parentElement;
+  }
+
+  return findParent(element.parentElement, className);
+}
+
 const reducers = {
   OUTPUT (state, action) {
     let terminal = state.terminals[action.paneNumber];
 
     if (!terminal) {
       terminal = state.terminals[action.paneNumber] = new Terminal();
+    }
+
+    const urlToBrowseRegex = /\033browse ([^\033]*)/;
+    const urlToBrowse = action.output.match(urlToBrowseRegex);
+
+    if (urlToBrowse) {
+      state.terminals[action.paneNumber].browsing = urlToBrowse[1];
+
+      return state;
     }
 
     terminal.write(action.output);
@@ -175,6 +207,12 @@ const reducers = {
     state.binds = action.newBinds;
 
     return state;
+  },
+
+  CLOSE_BROWSER (state, action) {
+    state.terminals[action.paneNumber].browsing = null;
+
+    return state;
   }
 };
 
@@ -212,6 +250,11 @@ function main ({DOM, Tmux, Resize}) {
     .events('keydown')
     .map(keyEventToAction);
 
+  const closeBrowser$ = DOM
+    .select('.browser .close')
+    .events('click')
+    .map(closeBrowserEventToAction);;
+
   const initialState = {
     terminals: {},
     layout: null,
@@ -225,7 +268,8 @@ function main ({DOM, Tmux, Resize}) {
     outputAction$,
     updateLayoutAction$,
     updateBindsAction$,
-    keydownAction$
+    keydownAction$,
+    closeBrowser$
   );
 
   const state$ = action$.fold(update, initialState);
@@ -281,6 +325,30 @@ function renderPane (state, pane) {
     width: `${pane.width}vw`,
     height: `${pane.height}vh`
   };
+
+  const urlToBrowse = state.terminals[pane.number].browsing;
+
+  if (urlToBrowse) {
+    return (
+      div('.browser', {attrs: {'data-number': pane.number}}, [
+        div('.controls', [
+          button('.close', 'Close'),
+          input({attrs: {value: urlToBrowse}}),
+          button('.back', 'Back'),
+          button('.forward', 'Forward')
+        ]),
+
+        h('webview', {
+          key: `webview-${pane.number}`,
+          style,
+          attrs: {
+            'data-number': pane.number,
+            src: state.terminals[pane.number].browsing
+          }
+        })
+      ])
+    );
+  }
 
   return (
     pre('.pane', {
@@ -360,10 +428,15 @@ function sanitizeSendKeys (keyToSend) {
     return '"\\$"';
   }
 
+  if (keyToSend === ';') {
+    return '"\\\\;"'
+  }
+
   const charactersToSanitize = [
     '#',
     "'",
-    '"'
+    '"',
+    ';'
   ];
 
   if (!charactersToSanitize.includes(keyToSend)) {
