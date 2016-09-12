@@ -114,10 +114,14 @@ bind-key    -T root   C-l              run-shell go-right
   });
 
   it('escapes tmux format strings', () => {
-    const input = `bind-key    -T prefix %                split-window -h -c #{pane_current_path}`;
+    const input = `
+bind-key    -T prefix %                split-window -h -c #{pane_current_path}
+bind-key    -T prefix "                split-window -c '#{pane_current_path}'
+`;
 
     const output = [
-      {type: 'prefix', key: '%', command: 'split-window -h -c "#{pane_current_path}"'}
+      {type: 'prefix', key: '%', command: 'split-window -h -c "#{pane_current_path}"'},
+      {type: 'prefix', key: '"', command: "split-window -c '#{pane_current_path}'"}
     ];
 
     assert.deepEqual(parseBinds(input), output);

@@ -4,7 +4,7 @@ function parseBind (bind) {
 
   let [_, type, key, command] = bind.match(regex);
 
-  command = command.replace(/#{([^}]*)}/g, (_, match) => `"#{${match}}"`);
+  command = command.replace(/ #{([^}]*)}/g, (_, match) => ` "#{${match}}"`);
 
   return {
     type,
