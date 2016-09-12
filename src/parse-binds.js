@@ -2,7 +2,9 @@
 function parseBind (bind) {
   const regex = /bind-key\W+(?:-r)?(?:-T)?\W+(\w+) +(\S+) +(.*)/;
 
-  const [_, type, key, command] = bind.match(regex);
+  let [_, type, key, command] = bind.match(regex);
+
+  command = command.replace(/#{([^}]*)}/g, (_, match) => `"#{${match}}"`);
 
   return {
     type,

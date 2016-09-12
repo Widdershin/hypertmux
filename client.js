@@ -15,8 +15,8 @@ bind-key    -T root   C-h              run-shell "(tmux display-message -p '#{pa
 bind-key    -T root   C-j              run-shell "(tmux display-message -p '#{pane_current_command}' | grep -iq vim && tmux send-keys C-j) || tmux select-pane -D"
 bind-key    -T root   C-k              run-shell "(tmux display-message -p '#{pane_current_command}' | grep -iq vim && tmux send-keys C-k) || tmux select-pane -U"
 bind-key    -T root   C-l              run-shell "(tmux display-message -p '#{pane_current_command}' | grep -iq vim && tmux send-keys C-l) || tmux select-pane -R"
-bind-key    -T prefix %                split-window -h
-bind-key    -T prefix "                split-window
+bind-key    -T prefix %                split-window -h -c #{pane_current_path}
+bind-key    -T prefix "                split-window -c #{pane_current_path}
 bind-key    -T prefix o                resize-pane -Z
 bind-key    -T prefix x                confirm-before -p "kill-pane #P? (y/n)" kill-pane
 `);

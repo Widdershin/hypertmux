@@ -112,5 +112,15 @@ bind-key    -T root   C-l              run-shell go-right
 
     assert.deepEqual(parseBinds(input), output);
   });
+
+  it('escapes tmux format strings', () => {
+    const input = `bind-key    -T prefix %                split-window -h -c #{pane_current_path}`;
+
+    const output = [
+      {type: 'prefix', key: '%', command: 'split-window -h -c "#{pane_current_path}"'}
+    ];
+
+    assert.deepEqual(parseBinds(input), output);
+  });
 });
 
