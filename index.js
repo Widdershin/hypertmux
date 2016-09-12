@@ -38,8 +38,8 @@ function createWindow () {
     });
 
     tmux.stdout.on('data', (data) => {
-      data = data.toString('utf8');
-      console.log('tmux:', data);
+      // console.log('tmux:', data);
+
       socket.send(data.toString('utf8'));
     });
 
