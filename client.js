@@ -1,9 +1,8 @@
 import {run} from '@cycle/xstream-run';
-import {makeDOMDriver, pre, div, h, input, button} from '@cycle/dom';
-
-import Terminal from 'terminal.js';
+import {makeDOMDriver, pre, div, h, input, button, span} from '@cycle/dom';
 import _ from 'lodash';
-
+import Terminal from 'terminal.js';
+import TerminalHTMLOutput from 'terminal.js/lib/output/html';
 import xs from 'xstream';
 import fromEvent from 'xstream/extra/fromEvent';
 import debounce from 'xstream/extra/debounce';
@@ -11,6 +10,8 @@ import dropRepeats from 'xstream/extra/dropRepeats';
 
 import parseTmuxLayout from './src/parse-layout';
 import parseBinds from './src/parse-binds';
+
+const COLORS = new TerminalHTMLOutput().colors;
 
 function resizeDriver () {
   return fromEvent(window, 'resize');
@@ -108,7 +109,7 @@ function closeBrowserEventToAction (event) {
     type: 'CLOSE_BROWSER',
 
     paneNumber
-  }
+  };
 }
 
 function findParent (element, className) {
@@ -253,7 +254,7 @@ function main ({DOM, Tmux, Resize}) {
   const closeBrowser$ = DOM
     .select('.browser .close')
     .events('click')
-    .map(closeBrowserEventToAction);;
+    .map(closeBrowserEventToAction);
 
   const initialState = {
     terminals: {},
@@ -356,11 +357,92 @@ function renderPane (state, pane) {
       style,
       attrs: {
         'data-number': pane.number
-      },
-      props: {
-        innerHTML: state.terminals[pane.number].toString('html', {cursorBg: '#eee'})
       }
-    })
+    }, [renderTerminal(state.terminals[pane.number])])
+  );
+}
+
+function renderTerminal (terminal) {
+  const lines = _.range(terminal.state.rows).map(terminal.state.getLine.bind(terminal.state));
+
+  return (
+    div('.terminal', lines.map((line, index) => renderTerminalLine(terminal, line, index)))
+  );
+}
+
+function addSegment (state) {
+  const previousAttr = state.currentInfo;
+
+  if (state.currentSegment !== '') {
+    const style = {
+      background: COLORS[previousAttr.bg],
+      color: COLORS[previousAttr.fg]
+    };
+
+    state.segments.push(
+      span(
+        '.line-segment',
+        {style}, // todo - key
+        state.currentSegment
+      )
+    );
+  }
+
+  state.currentSegment = '';
+
+  return state;
+}
+
+function lineIntoSegments (terminal, line, state, character, index, cursorIndex) {
+  const characterIsCursor = index === cursorIndex;
+
+  if (characterIsCursor) {
+    state = addSegment(state);
+
+    const cursorCharacter = character.trim() === ''
+      ? ' '
+      : character;
+
+    state.segments.push(
+      span(
+        '.line-segment.cursor',
+        {key: 'cursor'},
+        cursorCharacter
+      )
+    );
+  }
+
+  if (index in line.attr || character === '\n') {
+    state = addSegment(state);
+
+    state.currentInfo = line.attr[index];
+  }
+
+  if (!characterIsCursor) {
+    state.currentSegment += character;
+  }
+
+  return state;
+}
+
+function renderTerminalLine (terminal, line, index) {
+  const initialSegmentsState = {
+    segments: [],
+    currentSegment: '',
+    currentInfo: null
+  };
+
+  const cursorIndex = terminal.state.cursor.y === index
+    ? terminal.state.cursor.x
+    : null;
+
+  const {segments} = line.str.split('').concat('\n').reduce(
+    (state, character, index) => lineIntoSegments(terminal, line, state, character, index, cursorIndex),
+    initialSegmentsState
+  );
+
+  return (
+    div('.terminal-line', {key: index}, segments)
   );
 }
 
@@ -429,7 +511,7 @@ function sanitizeSendKeys (keyToSend) {
   }
 
   if (keyToSend === ';') {
-    return '"\\\\;"'
+    return '"\\\\;"';
   }
 
   const charactersToSanitize = [
