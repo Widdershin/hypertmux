@@ -1,6 +1,5 @@
 import {run} from '@cycle/xstream-run';
 import {makeDOMDriver, pre, div, h, input, button, span} from '@cycle/dom';
-import eachCons from 'each-cons';
 import _ from 'lodash';
 import Terminal from 'terminal.js';
 import TerminalHTMLOutput from 'terminal.js/lib/output/html';
@@ -389,7 +388,7 @@ function addSegment (state) {
     );
   }
 
-  state.currentSegment = ''
+  state.currentSegment = '';
 
   return state;
 }
@@ -512,7 +511,7 @@ function sanitizeSendKeys (keyToSend) {
   }
 
   if (keyToSend === ';') {
-    return '"\\\\;"'
+    return '"\\\\;"';
   }
 
   const charactersToSanitize = [
