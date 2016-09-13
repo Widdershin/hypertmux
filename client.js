@@ -368,32 +368,82 @@ function renderTerminal (terminal) {
 
   return (
     div('.terminal', lines.map((line, index) => renderTerminalLine(terminal, line, index)))
-  )
+  );
+}
+
+function addSegment (state) {
+  const previousAttr = state.currentInfo;
+
+  if (state.currentSegment !== '') {
+    const style = {
+      background: COLORS[previousAttr.bg],
+      color: COLORS[previousAttr.fg]
+    };
+
+    state.segments.push(
+      span(
+        '.line-segment',
+        {style}, // todo - key
+        state.currentSegment
+      )
+    );
+  }
+
+  state.currentSegment = ''
+
+  return state;
+}
+
+function lineIntoSegments (terminal, line, state, character, index, cursorIndex) {
+  const characterIsCursor = index === cursorIndex;
+
+  if (characterIsCursor) {
+    state = addSegment(state);
+
+    const cursorCharacter = character.trim() === ''
+      ? ' '
+      : character;
+
+    state.segments.push(
+      span(
+        '.line-segment.cursor',
+        {key: 'cursor'},
+        cursorCharacter
+      )
+    );
+  }
+
+  if (index in line.attr || character === '\n') {
+    state = addSegment(state);
+
+    state.currentInfo = line.attr[index];
+  }
+
+  if (!characterIsCursor) {
+    state.currentSegment += character;
+  }
+
+  return state;
 }
 
 function renderTerminalLine (terminal, line, index) {
-  const colorSegmentIndexes = Object.keys(line.attr).concat(line.str.length + 1);
-  const colorSegmentIndexPairs = eachCons(colorSegmentIndexes, 2);
+  const initialSegmentsState = {
+    segments: [],
+    currentSegment: '',
+    currentInfo: null
+  };
 
-  const colorSegments = colorSegmentIndexPairs.map(([start, end], segmentIndex) => {
-    const attr = line.attr[start];
+  const cursorIndex = terminal.state.cursor.y === index
+    ? terminal.state.cursor.x
+    : null;
 
-    const style = {
-      background: COLORS[attr.bg],
-      color: COLORS[attr.fg]
-    };
-
-    return (
-      span(
-        '.line-segment',
-        {style, key: '' + index + segmentIndex},
-        line.str.slice(start, end)
-      )
-    );
-  });
+  const {segments} = line.str.split('').concat('\n').reduce(
+    (state, character, index) => lineIntoSegments(terminal, line, state, character, index, cursorIndex),
+    initialSegmentsState
+  );
 
   return (
-    div('.terminal-line', {key: index}, colorSegments)
+    div('.terminal-line', {key: index}, segments)
   );
 }
 
