@@ -29,7 +29,7 @@ function createWindow () {
     socket.send('%update-binds ' + childProcess.execSync('tmux list-keys').toString('utf-8'));
 
     socket.on('message', (message) => {
-      console.log('received:', message);
+      //console.log('received:', message);
       tmux.stdin.write(message + '\n');
     });
 
@@ -39,7 +39,7 @@ function createWindow () {
 
     tmux.stdout.on('data', (data) => {
       data = data.toString('utf8')
-      console.log('tmux:', data);
+      //console.log('tmux:', data);
 
       socket.send(data);
     });

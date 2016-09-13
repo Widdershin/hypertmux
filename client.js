@@ -1,9 +1,9 @@
 import {run} from '@cycle/xstream-run';
-import {makeDOMDriver, pre, div, h, input, button} from '@cycle/dom';
-
-import Terminal from 'terminal.js';
+import {makeDOMDriver, pre, div, h, input, button, span} from '@cycle/dom';
+import eachCons from 'each-cons';
 import _ from 'lodash';
-
+import Terminal from 'terminal.js';
+import TerminalHTMLOutput from 'terminal.js/lib/output/html';
 import xs from 'xstream';
 import fromEvent from 'xstream/extra/fromEvent';
 import debounce from 'xstream/extra/debounce';
@@ -11,6 +11,8 @@ import dropRepeats from 'xstream/extra/dropRepeats';
 
 import parseTmuxLayout from './src/parse-layout';
 import parseBinds from './src/parse-binds';
+
+const COLORS = new TerminalHTMLOutput().colors;
 
 function resizeDriver () {
   return fromEvent(window, 'resize');
@@ -108,7 +110,7 @@ function closeBrowserEventToAction (event) {
     type: 'CLOSE_BROWSER',
 
     paneNumber
-  }
+  };
 }
 
 function findParent (element, className) {
@@ -253,7 +255,7 @@ function main ({DOM, Tmux, Resize}) {
   const closeBrowser$ = DOM
     .select('.browser .close')
     .events('click')
-    .map(closeBrowserEventToAction);;
+    .map(closeBrowserEventToAction);
 
   const initialState = {
     terminals: {},
@@ -356,11 +358,42 @@ function renderPane (state, pane) {
       style,
       attrs: {
         'data-number': pane.number
-      },
-      props: {
-        innerHTML: state.terminals[pane.number].toString('html', {cursorBg: '#eee'})
       }
-    })
+    }, [renderTerminal(state.terminals[pane.number])])
+  );
+}
+
+function renderTerminal (terminal) {
+  const lines = _.range(terminal.state.rows).map(terminal.state.getLine.bind(terminal.state));
+
+  return (
+    div('.terminal', lines.map((line, index) => renderTerminalLine(terminal, line, index)))
+  )
+}
+
+function renderTerminalLine (terminal, line, index) {
+  const colorSegmentIndexes = Object.keys(line.attr).concat(line.str.length + 1);
+  const colorSegmentIndexPairs = eachCons(colorSegmentIndexes, 2);
+
+  const colorSegments = colorSegmentIndexPairs.map(([start, end], segmentIndex) => {
+    const attr = line.attr[start];
+
+    const style = {
+      background: COLORS[attr.bg],
+      color: COLORS[attr.fg]
+    };
+
+    return (
+      span(
+        '.line-segment',
+        {style, key: '' + index + segmentIndex},
+        line.str.slice(start, end)
+      )
+    );
+  });
+
+  return (
+    div('.terminal-line', {key: index}, colorSegments)
   );
 }
 

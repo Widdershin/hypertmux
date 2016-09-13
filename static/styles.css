@@ -19,7 +19,7 @@ pre {
   line-height: 20px;
 }
 
-pre>div {
+.terminal-line {
   margin: -1px 0px;
 }
 
