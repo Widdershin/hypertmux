@@ -112,6 +112,37 @@ function closeBrowserEventToAction (event) {
   };
 }
 
+function startDraggingEventToAction (event) {
+  const containerElement = findParent(event.target, '.container');
+  const paneToResize = containerElement.children[0].dataset.number;
+  const resizingContainerDimensions = containerElement.getBoundingClientRect();
+
+  resizingContainerDimensions.rows = containerElement.dataset.rows;
+  resizingContainerDimensions.columns = containerElement.dataset.columns;
+
+  return {
+    type: 'START_RESIZE_PANE',
+
+    paneToResize,
+
+    resizingContainerDimensions
+  };
+}
+
+function stopDraggingEventToAction (event) {
+  return {
+    type: 'STOP_RESIZE_PANE'
+  };
+}
+
+function mousemoveEventToAction (position) {
+  return {
+    type: 'MOUSE_MOVE',
+
+    position
+  };
+}
+
 function findParent (element, className) {
   if (!element.parentElement) {
     return null;
@@ -214,6 +245,41 @@ const reducers = {
     state.terminals[action.paneNumber].browsing = null;
 
     return state;
+  },
+
+  START_RESIZE_PANE (state, action) {
+    state.paneToResize = action.paneToResize;
+    state.resizingContainerDimensions = action.resizingContainerDimensions;
+
+    return state;
+  },
+
+  STOP_RESIZE_PANE (state, action) {
+    state.paneToResize = null;
+    state.resizingContainerDimensions = null;
+
+    return state;
+  },
+
+  MOUSE_MOVE (state, action) {
+    if (!state.paneToResize) {
+      return state;
+    }
+
+    const newPaneRatio = action.position.x / state.resizingContainerDimensions.width;
+
+    const newPaneColumns = Math.floor(state.resizingContainerDimensions.columns * newPaneRatio);
+
+    return Object.assign(
+      {},
+      state,
+      {
+        messages: [
+          `resize-pane -t %${state.paneToResize} -x ${newPaneColumns}`
+        ],
+        messageCount: state.messageCount + 1
+      }
+    );
   }
 };
 
@@ -223,6 +289,13 @@ function findPanes (layout) {
   }
 
   return _.flatten(layout.children.map(findPanes));
+}
+
+function currentMousePosition (event) {
+  return {
+    x: event.clientX,
+    y: event.clientY
+  };
 }
 
 function update (state, action) {
@@ -256,13 +329,33 @@ function main ({DOM, Tmux, Resize}) {
     .events('click')
     .map(closeBrowserEventToAction);
 
+  const startDraggingDivider$ = DOM
+    .select('.divider')
+    .events('mousedown')
+    .map(startDraggingEventToAction);
+
+  const stopDraggingDivider$ = DOM
+    .select('document')
+    .events('mouseup')
+    .map(stopDraggingEventToAction);
+
+  const mousemove$ = DOM
+    .select('document')
+    .events('mousemove')
+    .map(currentMousePosition);
+
+  const resizeDivider$ = mousemove$
+    .map(mousemoveEventToAction);
+
   const initialState = {
     terminals: {},
     layout: null,
     leaderPressed: false,
     messages: [],
     messageCount: 0,
-    binds: []
+    binds: [],
+    paneToResize: null,
+    resizingContainerDimensions: null
   };
 
   const action$ = xs.merge(
@@ -270,7 +363,10 @@ function main ({DOM, Tmux, Resize}) {
     updateLayoutAction$,
     updateBindsAction$,
     keydownAction$,
-    closeBrowser$
+    closeBrowser$,
+    startDraggingDivider$,
+    stopDraggingDivider$,
+    resizeDivider$
   );
 
   const state$ = action$.fold(update, initialState);
@@ -474,6 +570,11 @@ function renderContainer (state, container) {
     height: `${container.height}vh`
   };
 
+  const attrs = {
+    'data-rows': container.rows,
+    'data-columns': container.columns
+  };
+
   const childrenWithDividers = _.flatten(
     container.children.map((layout, index) => {
       if (index === 0) {
@@ -488,7 +589,7 @@ function renderContainer (state, container) {
   );
 
   return (
-    div('.container', {style}, childrenWithDividers)
+    div('.container', {style, attrs}, childrenWithDividers)
   );
 }
 

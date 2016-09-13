@@ -30,6 +30,8 @@ pre {
 .divider {
   background: #233;
   flex-shrink: 0;
+  cursor: grab;
+  z-index: 10;
 }
 
 .controls {
