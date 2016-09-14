@@ -155,6 +155,13 @@ function findParent (element, className) {
   return findParent(element.parentElement, className);
 }
 
+function sendMessageToTmux (state, ...messages) {
+  state.messages = messages;
+  state.messageCount += messages.length;
+
+  return state;
+}
+
 const reducers = {
   OUTPUT (state, action) {
     let terminal = state.terminals[action.paneNumber];
@@ -211,28 +218,28 @@ const reducers = {
     });
 
     if (bind) {
-      return Object.assign({}, state, {
-        messageCount: state.messageCount + 1,
+      state = sendMessageToTmux(
+        state,
+        bind.command
+      );
 
-        messages: [
-          bind.command
-        ],
+      state.leaderPressed = false;
 
-        leaderPressed: false
-      });
+      return state;
     }
 
     if (action.key === undefined) {
       return state;
     }
 
-    return Object.assign({}, state, {
-      messageCount: state.messageCount + 1,
-      messages: [
-        `send-keys ${sanitizeSendKeys(action.key)}`
-      ],
-      leaderPressed: false
-    });
+    state = sendMessageToTmux(
+      state,
+      `send-keys ${sanitizeSendKeys(action.key)}`
+    );
+
+    state.leaderPressed = false;
+
+    return state;
   },
 
   UPDATE_BINDS (state, action) {
@@ -270,16 +277,12 @@ const reducers = {
 
     const newPaneColumns = Math.floor(state.resizingContainerDimensions.columns * newPaneRatio);
 
-    return Object.assign(
-      {},
+    state = sendMessageToTmux(
       state,
-      {
-        messages: [
-          `resize-pane -t %${state.paneToResize} -x ${newPaneColumns}`
-        ],
-        messageCount: state.messageCount + 1
-      }
+      `resize-pane -t %${state.paneToResize} -x ${newPaneColumns}`
     );
+
+    return state;
   }
 };
 
