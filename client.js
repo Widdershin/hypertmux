@@ -114,7 +114,8 @@ function closeBrowserEventToAction (event) {
 
 function startDraggingEventToAction (event) {
   const containerElement = findParent(event.target, '.container');
-  const paneToResize = containerElement.children[0].dataset.number;
+  const dividerIndex = Array.from(containerElement.children).findIndex(child => child === event.target);
+  const paneToResize = containerElement.children[dividerIndex - 1].dataset.number;
   const resizingContainerDimensions = containerElement.getBoundingClientRect();
 
   resizingContainerDimensions.rows = containerElement.dataset.rows;
@@ -123,7 +124,7 @@ function startDraggingEventToAction (event) {
   return {
     type: 'START_RESIZE_PANE',
 
-    paneToResize,
+    paneToResize: parseInt(paneToResize, 10),
 
     resizingContainerDimensions
   };
@@ -156,10 +157,14 @@ function findParent (element, className) {
 }
 
 function sendMessageToTmux (state, ...messages) {
-  state.messages = messages;
-  state.messageCount += messages.length;
-
-  return state;
+  return Object.assign(
+    {},
+    state,
+    {
+      messages,
+      messageCount: state.messageCount + messages.length
+    }
+  );
 }
 
 const reducers = {
@@ -273,9 +278,17 @@ const reducers = {
       return state;
     }
 
-    const newPaneRatio = action.position.x / state.resizingContainerDimensions.width;
+    const paneIndex = state.layout.children.findIndex(layout => layout.number === state.paneToResize);
+
+    const widthStart = _.sum(state.layout.children.slice(0, paneIndex).map(layout => layout.width / 100));
+
+    const newPaneRatio = (action.position.x - state.resizingContainerDimensions.left) / state.resizingContainerDimensions.width - widthStart;
 
     const newPaneColumns = Math.floor(state.resizingContainerDimensions.columns * newPaneRatio);
+
+    if (newPaneColumns === state.layout.children[paneIndex].columns) {
+      return state;
+    }
 
     state = sendMessageToTmux(
       state,
@@ -345,7 +358,8 @@ function main ({DOM, Tmux, Resize}) {
   const mousemove$ = DOM
     .select('document')
     .events('mousemove')
-    .map(currentMousePosition);
+    .map(currentMousePosition)
+    .compose(debounce(5));
 
   const resizeDivider$ = mousemove$
     .map(mousemoveEventToAction);
@@ -545,7 +559,7 @@ function renderTerminalLine (terminal, line, index) {
   );
 }
 
-function divider (container) {
+function divider (container, isBeingDragged) {
   let style;
 
   if (container.direction === 'row') {
@@ -561,7 +575,7 @@ function divider (container) {
   }
 
   return (
-    div('.divider', {style})
+    div('.divider', {style, class: {dragging: isBeingDragged}})
   );
 }
 
@@ -580,13 +594,15 @@ function renderContainer (state, container) {
 
   const childrenWithDividers = _.flatten(
     container.children.map((layout, index) => {
-      if (index === 0) {
+      if (index === container.children.length - 1) {
         return renderLayout(state, layout);
       }
 
+      let isBeingDragged = layout.type === 'pane' && state.paneToResize === layout.number;
+
       return [
-        divider(container),
-        renderLayout(state, layout)
+        renderLayout(state, layout),
+        divider(container, isBeingDragged)
       ];
     })
   );

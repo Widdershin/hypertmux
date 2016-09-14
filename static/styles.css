@@ -30,8 +30,13 @@ pre {
 .divider {
   background: #233;
   flex-shrink: 0;
-  cursor: grab;
+  cursor: -webkit-grab;
   z-index: 10;
+}
+
+.divider.dragging {
+  background: #344;
+  cursor: -webkit-grabbing;
 }
 
 .controls {
