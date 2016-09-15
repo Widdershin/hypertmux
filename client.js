@@ -89,6 +89,16 @@ function updateBindsToAction (message) {
   };
 }
 
+function activePaneChangedToAction (message) {
+  const [_, windowNumber, paneNumber] = message.match(/%active-pane-changed @(\d+) %(\d+)/); // eslint-disable-line no-unused-vars
+
+  return {
+    type: 'ACTIVE_PANE_CHANGED',
+
+    paneNumber: parseInt(paneNumber, 10)
+  };
+}
+
 function keyEventToAction (event) {
   const key = parseInputEvent(event);
 
@@ -253,6 +263,16 @@ const reducers = {
     return state;
   },
 
+  ACTIVE_PANE_CHANGED (state, action) {
+    state.activePane = action.paneNumber;
+
+    _.entries(state.terminals).forEach(([paneNumber, terminal]) => {
+      terminal.state.setMode('cursor', parseInt(paneNumber, 10) === state.activePane);
+    });
+
+    return state;
+  },
+
   CLOSE_BROWSER (state, action) {
     state.terminals[action.paneNumber].browsing = null;
 
@@ -335,6 +355,10 @@ function main ({DOM, Tmux, Resize}) {
     .filter(message => message.startsWith('%update-binds'))
     .map(updateBindsToAction);
 
+  const updateActivePane$ = Tmux
+    .filter(message => message.startsWith('%active-pane-changed'))
+    .map(activePaneChangedToAction);
+
   const keydownAction$ = DOM
     .select('document')
     .events('keydown')
@@ -372,7 +396,8 @@ function main ({DOM, Tmux, Resize}) {
     messageCount: 0,
     binds: [],
     paneToResize: null,
-    resizingContainerDimensions: null
+    resizingContainerDimensions: null,
+    activePane: null
   };
 
   const action$ = xs.merge(
@@ -383,7 +408,8 @@ function main ({DOM, Tmux, Resize}) {
     closeBrowser$,
     startDraggingDivider$,
     stopDraggingDivider$,
-    resizeDivider$
+    resizeDivider$,
+    updateActivePane$
   );
 
   const state$ = action$.fold(update, initialState);
@@ -442,9 +468,11 @@ function renderPane (state, pane) {
 
   const urlToBrowse = state.terminals[pane.number].browsing;
 
+  const active = state.activePane === pane.number;
+
   if (urlToBrowse) {
     return (
-      div('.browser', {attrs: {'data-number': pane.number}}, [
+      div('.browser', {attrs: {'data-number': pane.number}, class: {active}}, [
         div('.controls', [
           button('.close', 'Close'),
           input({attrs: {value: urlToBrowse}}),
@@ -466,6 +494,7 @@ function renderPane (state, pane) {
 
   return (
     pre('.pane', {
+      class: {active},
       key: `pane-${pane.number}`,
       style,
       attrs: {
@@ -545,7 +574,7 @@ function renderTerminalLine (terminal, line, index) {
     currentInfo: null
   };
 
-  const cursorIndex = terminal.state.cursor.y === index
+  const cursorIndex = terminal.state.getMode('cursor') && terminal.state.cursor.y === index
     ? terminal.state.cursor.x
     : null;
 

@@ -24,7 +24,7 @@ pre {
 }
 
 .active {
-  border: 1px solid rebeccapurple;
+  /*border: 1px solid rebeccapurple;*/
 }
 
 .divider {
@@ -54,9 +54,9 @@ webview {
 }
 
 .cursor {
-  background: pink;
+  background: #DF3EBB;
   color: black;
-  animation: hueRotate 1s linear 0s infinite;
+  animation: hueRotate 2s linear 0s infinite;
 }
 
 @keyframes hueRotate {
