@@ -463,7 +463,8 @@ function renderLayout (state, layout) {
 function renderPane (state, pane) {
   const style = {
     width: `${pane.width}vw`,
-    height: `${pane.height}vh`
+    height: `${pane.height}vh`,
+    position: 'relative'
   };
 
   const urlToBrowse = state.terminals[pane.number].browsing;
@@ -472,7 +473,7 @@ function renderPane (state, pane) {
 
   if (urlToBrowse) {
     return (
-      div('.browser', {attrs: {'data-number': pane.number}, class: {active}}, [
+      div('.pane.browser', {attrs: {'data-number': pane.number}, class: {active}}, [
         div('.controls', [
           button('.close', 'Close'),
           input({attrs: {value: urlToBrowse}}),
@@ -491,6 +492,11 @@ function renderPane (state, pane) {
       ])
     );
   }
+  const children = [renderTerminal(state.terminals[pane.number])];
+
+  if (active) {
+    children.push(renderActiveBorder())
+  }
 
   return (
     pre('.pane', {
@@ -500,7 +506,7 @@ function renderPane (state, pane) {
       attrs: {
         'data-number': pane.number
       }
-    }, [renderTerminal(state.terminals[pane.number])])
+    }, children)
   );
 }
 
@@ -627,7 +633,7 @@ function renderContainer (state, container) {
         return renderLayout(state, layout);
       }
 
-      let isBeingDragged = layout.type === 'pane' && state.paneToResize === layout.number;
+      const isBeingDragged = layout.type === 'pane' && state.paneToResize === layout.number;
 
       return [
         renderLayout(state, layout),
@@ -639,6 +645,12 @@ function renderContainer (state, container) {
   return (
     div('.container', {style, attrs}, childrenWithDividers)
   );
+}
+
+function renderActiveBorder () {
+  return (
+    div('.active-border')
+  )
 }
 
 function updateTerminalSize () {
