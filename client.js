@@ -89,6 +89,16 @@ function updateBindsToAction (message) {
   };
 }
 
+function activePaneChangedToAction (message) {
+  const [_, windowNumber, paneNumber] = message.match(/%active-pane-changed @(\d+) %(\d+)/); // eslint-disable-line no-unused-vars
+
+  return {
+    type: 'ACTIVE_PANE_CHANGED',
+
+    paneNumber: parseInt(paneNumber, 10)
+  };
+}
+
 function keyEventToAction (event) {
   const key = parseInputEvent(event);
 
@@ -112,6 +122,38 @@ function closeBrowserEventToAction (event) {
   };
 }
 
+function startDraggingEventToAction (event) {
+  const containerElement = findParent(event.target, '.container');
+  const dividerIndex = Array.from(containerElement.children).findIndex(child => child === event.target);
+  const paneToResize = containerElement.children[dividerIndex - 1].dataset.number;
+  const resizingContainerDimensions = containerElement.getBoundingClientRect();
+
+  resizingContainerDimensions.rows = containerElement.dataset.rows;
+  resizingContainerDimensions.columns = containerElement.dataset.columns;
+
+  return {
+    type: 'START_RESIZE_PANE',
+
+    paneToResize: parseInt(paneToResize, 10),
+
+    resizingContainerDimensions
+  };
+}
+
+function stopDraggingEventToAction (event) {
+  return {
+    type: 'STOP_RESIZE_PANE'
+  };
+}
+
+function mousemoveEventToAction (position) {
+  return {
+    type: 'MOUSE_MOVE',
+
+    position
+  };
+}
+
 function findParent (element, className) {
   if (!element.parentElement) {
     return null;
@@ -122,6 +164,17 @@ function findParent (element, className) {
   }
 
   return findParent(element.parentElement, className);
+}
+
+function sendMessageToTmux (state, ...messages) {
+  return Object.assign(
+    {},
+    state,
+    {
+      messages,
+      messageCount: state.messageCount + messages.length
+    }
+  );
 }
 
 const reducers = {
@@ -180,28 +233,28 @@ const reducers = {
     });
 
     if (bind) {
-      return Object.assign({}, state, {
-        messageCount: state.messageCount + 1,
+      state = sendMessageToTmux(
+        state,
+        bind.command
+      );
 
-        messages: [
-          bind.command
-        ],
+      state.leaderPressed = false;
 
-        leaderPressed: false
-      });
+      return state;
     }
 
     if (action.key === undefined) {
       return state;
     }
 
-    return Object.assign({}, state, {
-      messageCount: state.messageCount + 1,
-      messages: [
-        `send-keys ${sanitizeSendKeys(action.key)}`
-      ],
-      leaderPressed: false
-    });
+    state = sendMessageToTmux(
+      state,
+      `send-keys ${sanitizeSendKeys(action.key)}`
+    );
+
+    state.leaderPressed = false;
+
+    return state;
   },
 
   UPDATE_BINDS (state, action) {
@@ -210,8 +263,57 @@ const reducers = {
     return state;
   },
 
+  ACTIVE_PANE_CHANGED (state, action) {
+    state.activePane = action.paneNumber;
+
+    _.entries(state.terminals).forEach(([paneNumber, terminal]) => {
+      terminal.state.setMode('cursor', parseInt(paneNumber, 10) === state.activePane);
+    });
+
+    return state;
+  },
+
   CLOSE_BROWSER (state, action) {
     state.terminals[action.paneNumber].browsing = null;
+
+    return state;
+  },
+
+  START_RESIZE_PANE (state, action) {
+    state.paneToResize = action.paneToResize;
+    state.resizingContainerDimensions = action.resizingContainerDimensions;
+
+    return state;
+  },
+
+  STOP_RESIZE_PANE (state, action) {
+    state.paneToResize = null;
+    state.resizingContainerDimensions = null;
+
+    return state;
+  },
+
+  MOUSE_MOVE (state, action) {
+    if (!state.paneToResize) {
+      return state;
+    }
+
+    const paneIndex = state.layout.children.findIndex(layout => layout.number === state.paneToResize);
+
+    const widthStart = _.sum(state.layout.children.slice(0, paneIndex).map(layout => layout.width / 100));
+
+    const newPaneRatio = (action.position.x - state.resizingContainerDimensions.left) / state.resizingContainerDimensions.width - widthStart;
+
+    const newPaneColumns = Math.floor(state.resizingContainerDimensions.columns * newPaneRatio);
+
+    if (newPaneColumns === state.layout.children[paneIndex].columns) {
+      return state;
+    }
+
+    state = sendMessageToTmux(
+      state,
+      `resize-pane -t %${state.paneToResize} -x ${newPaneColumns}`
+    );
 
     return state;
   }
@@ -223,6 +325,13 @@ function findPanes (layout) {
   }
 
   return _.flatten(layout.children.map(findPanes));
+}
+
+function currentMousePosition (event) {
+  return {
+    x: event.clientX,
+    y: event.clientY
+  };
 }
 
 function update (state, action) {
@@ -246,6 +355,10 @@ function main ({DOM, Tmux, Resize}) {
     .filter(message => message.startsWith('%update-binds'))
     .map(updateBindsToAction);
 
+  const updateActivePane$ = Tmux
+    .filter(message => message.startsWith('%active-pane-changed'))
+    .map(activePaneChangedToAction);
+
   const keydownAction$ = DOM
     .select('document')
     .events('keydown')
@@ -256,13 +369,35 @@ function main ({DOM, Tmux, Resize}) {
     .events('click')
     .map(closeBrowserEventToAction);
 
+  const startDraggingDivider$ = DOM
+    .select('.divider')
+    .events('mousedown')
+    .map(startDraggingEventToAction);
+
+  const stopDraggingDivider$ = DOM
+    .select('document')
+    .events('mouseup')
+    .map(stopDraggingEventToAction);
+
+  const mousemove$ = DOM
+    .select('document')
+    .events('mousemove')
+    .map(currentMousePosition)
+    .compose(debounce(5));
+
+  const resizeDivider$ = mousemove$
+    .map(mousemoveEventToAction);
+
   const initialState = {
     terminals: {},
     layout: null,
     leaderPressed: false,
     messages: [],
     messageCount: 0,
-    binds: []
+    binds: [],
+    paneToResize: null,
+    resizingContainerDimensions: null,
+    activePane: null
   };
 
   const action$ = xs.merge(
@@ -270,7 +405,11 @@ function main ({DOM, Tmux, Resize}) {
     updateLayoutAction$,
     updateBindsAction$,
     keydownAction$,
-    closeBrowser$
+    closeBrowser$,
+    startDraggingDivider$,
+    stopDraggingDivider$,
+    resizeDivider$,
+    updateActivePane$
   );
 
   const state$ = action$.fold(update, initialState);
@@ -324,14 +463,17 @@ function renderLayout (state, layout) {
 function renderPane (state, pane) {
   const style = {
     width: `${pane.width}vw`,
-    height: `${pane.height}vh`
+    height: `${pane.height}vh`,
+    position: 'relative'
   };
 
   const urlToBrowse = state.terminals[pane.number].browsing;
 
+  const active = state.activePane === pane.number;
+
   if (urlToBrowse) {
     return (
-      div('.browser', {attrs: {'data-number': pane.number}}, [
+      div('.pane.browser', {attrs: {'data-number': pane.number}, class: {active}}, [
         div('.controls', [
           button('.close', 'Close'),
           input({attrs: {value: urlToBrowse}}),
@@ -350,15 +492,21 @@ function renderPane (state, pane) {
       ])
     );
   }
+  const children = [renderTerminal(state.terminals[pane.number])];
+
+  if (active) {
+    children.push(renderActiveBorder())
+  }
 
   return (
     pre('.pane', {
+      class: {active},
       key: `pane-${pane.number}`,
       style,
       attrs: {
         'data-number': pane.number
       }
-    }, [renderTerminal(state.terminals[pane.number])])
+    }, children)
   );
 }
 
@@ -432,7 +580,7 @@ function renderTerminalLine (terminal, line, index) {
     currentInfo: null
   };
 
-  const cursorIndex = terminal.state.cursor.y === index
+  const cursorIndex = terminal.state.getMode('cursor') && terminal.state.cursor.y === index
     ? terminal.state.cursor.x
     : null;
 
@@ -446,7 +594,7 @@ function renderTerminalLine (terminal, line, index) {
   );
 }
 
-function divider (container) {
+function divider (container, isBeingDragged) {
   let style;
 
   if (container.direction === 'row') {
@@ -462,7 +610,7 @@ function divider (container) {
   }
 
   return (
-    div('.divider', {style})
+    div('.divider', {style, class: {dragging: isBeingDragged}})
   );
 }
 
@@ -474,22 +622,35 @@ function renderContainer (state, container) {
     height: `${container.height}vh`
   };
 
+  const attrs = {
+    'data-rows': container.rows,
+    'data-columns': container.columns
+  };
+
   const childrenWithDividers = _.flatten(
     container.children.map((layout, index) => {
-      if (index === 0) {
+      if (index === container.children.length - 1) {
         return renderLayout(state, layout);
       }
 
+      const isBeingDragged = layout.type === 'pane' && state.paneToResize === layout.number;
+
       return [
-        divider(container),
-        renderLayout(state, layout)
+        renderLayout(state, layout),
+        divider(container, isBeingDragged)
       ];
     })
   );
 
   return (
-    div('.container', {style}, childrenWithDividers)
+    div('.container', {style, attrs}, childrenWithDividers)
   );
+}
+
+function renderActiveBorder () {
+  return (
+    div('.active-border')
+  )
 }
 
 function updateTerminalSize () {
