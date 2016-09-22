@@ -20,6 +20,8 @@ First, ensure you have tmux v2.2+ and npm available.
 ```bash
 $ git clone https://github.com/Widdershin/hypertmux.git
 
+$ cd hypertmux
+
 $ npm install
 
 $ npm start
