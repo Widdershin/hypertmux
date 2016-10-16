@@ -5,6 +5,10 @@ html, body {
   background: #122;
 }
 
+webview {
+  background: white;
+}
+
 .output {
   display: flex;
   height: 100vh;
