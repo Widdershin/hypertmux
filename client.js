@@ -112,6 +112,14 @@ function closeBrowserEventToAction (event) {
   };
 }
 
+function pasteEventToAction (event) {
+  return {
+    type: 'PASTE',
+
+    paste: event.clipboardData.getData('text/plain')
+  }
+}
+
 function findParent (element, className) {
   if (!element.parentElement) {
     return null;
@@ -144,6 +152,16 @@ const reducers = {
     terminal.write(action.output);
 
     return state;
+  },
+
+  PASTE (state, action) {
+    return Object.assign({}, state, {
+      messageCount: state.messageCount + 1,
+      messages: [
+        `send-keys \"${action.paste}\"`
+      ],
+      leaderPressed: false
+    });
   },
 
   UPDATE_LAYOUT (state, action) {
@@ -234,6 +252,11 @@ function update (state, action) {
 }
 
 function main ({DOM, Tmux, Resize}) {
+  const pasteAction$ = DOM
+    .select('document')
+    .events('paste')
+    .map(pasteEventToAction);
+
   const outputAction$ = Tmux
     .filter(message => message.startsWith('%output'))
     .map(outputMessageToAction);
@@ -270,7 +293,8 @@ function main ({DOM, Tmux, Resize}) {
     updateLayoutAction$,
     updateBindsAction$,
     keydownAction$,
-    closeBrowser$
+    closeBrowser$,
+    pasteAction$
   );
 
   const state$ = action$.fold(update, initialState);
@@ -529,7 +553,7 @@ function sanitizeSendKeys (keyToSend) {
 }
 
 function parseInputEvent (event) {
-  event.preventDefault();
+  //event.preventDefault();
 
   let keyToSend = event.key;
 
@@ -547,6 +571,10 @@ function parseInputEvent (event) {
 
   if (keyToSend.startsWith('Arrow')) {
     keyToSend = keyToSend.replace('Arrow', '');
+  }
+
+  if (event.ctrlKey && event.shiftKey && event.keyToSend === 'C') {
+    return;
   }
 
   if (event.ctrlKey) {

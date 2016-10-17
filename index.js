@@ -1,7 +1,8 @@
 import ws from 'ws';
 import http from 'http';
 import childProcess from 'child_process';
-const {app, BrowserWindow} = require('electron');
+const {app, BrowserWindow, Menu} = require('electron');
+import customMenu from './menu';
 
 // Keep a global reference of the window object, if you don't, the window will
 // be closed automatically when the JavaScript object is garbage collected.
@@ -9,6 +10,8 @@ let win;
 let server;
 
 function createWindow () {
+  Menu.setApplicationMenu(customMenu);
+
   // Create the browser window.
   win = new BrowserWindow({width: 800, height: 600});
 
