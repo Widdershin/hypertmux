@@ -565,7 +565,7 @@ function parseInputEvent (event) {
     keyToSend = 'Space';
   }
 
-  if (keyToSend === 'Control' || keyToSend === 'Shift' || keyToSend === 'Meta') {
+  if (keyToSend === 'Control' || keyToSend === 'Shift' || keyToSend === 'Meta' || keyToSend === 'Alt') {
     return;
   }
 
