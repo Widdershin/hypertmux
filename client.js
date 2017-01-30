@@ -576,6 +576,10 @@ function parseInputEvent (event) {
     keyToSend = `M-${keyToSend}`;
   }
 
+  if (keyToSend === "~") {
+    keyToSend = JSON.stringify(keyToSend);
+  }
+
   return keyToSend;
 }
 
