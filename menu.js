@@ -78,7 +78,7 @@ const template = [
 ]
 
 if (process.platform === 'darwin') {
-  const name = require('electron').remote.app.getName()
+  const name = 'hypertmux';
   template.unshift({
     label: name,
     submenu: [
