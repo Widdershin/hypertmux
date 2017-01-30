@@ -37,16 +37,7 @@ function tmuxDriver (sink$, streamAdapter) {
   };
 
   socket.onmessage = function passMessageToStream (message) {
-    if (message.data.startsWith('%update-binds')) {
-      observer.next(message.data);
-
-      return;
-    }
-
-    message.data
-      .split('\n')
-      .filter(message => message.length > 0)
-      .forEach(observer.next);
+    observer.next(message.data);
   };
 
   return stream;

@@ -3,6 +3,7 @@ import http from 'http';
 import childProcess from 'child_process';
 const {app, BrowserWindow, Menu} = require('electron');
 import customMenu from './menu';
+import split from 'split2';
 
 // Keep a global reference of the window object, if you don't, the window will
 // be closed automatically when the JavaScript object is garbage collected.
@@ -40,9 +41,8 @@ function createWindow () {
       tmux.kill();
     });
 
-    tmux.stdout.on('data', (data) => {
-      data = data.toString('utf8')
-      //console.log('tmux:', data);
+    tmux.stdout.pipe(split()).on('data', (data) => {
+      console.log('tmux:', data);
 
       socket.send(data);
     });
