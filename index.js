@@ -42,7 +42,7 @@ function createWindow () {
     });
 
     tmux.stdout.pipe(split()).on('data', (data) => {
-      console.log('tmux:', data);
+      //console.log('tmux:', data);
 
       socket.send(data);
     });
