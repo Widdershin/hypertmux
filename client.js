@@ -580,6 +580,10 @@ function parseInputEvent (event) {
     keyToSend = JSON.stringify(keyToSend);
   }
 
+  if (keyToSend === 'C-a') {
+    event.preventDefault();
+  }
+
   return keyToSend;
 }
 
