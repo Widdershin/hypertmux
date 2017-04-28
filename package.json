@@ -6,7 +6,8 @@
   "scripts": {
     "test": "mocha --compilers js:babel-core/register",
     "test/auto": "mocha --compilers js:babel-core/register --watch -R min",
-    "start": "browserify client.js -t babelify -o static/bundle.js && babel index.js menu.js -d lib/ && electron ."
+    "compile": "browserify client.js -t babelify -o static/bundle.js && babel index.js menu.js -d lib/",
+    "start": "npm run compile && electron ."
   },
   "keywords": [],
   "author": "",
