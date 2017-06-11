@@ -80,6 +80,21 @@ function updateBindsToAction (message) {
   };
 }
 
+const WINDOW_PANE_CHANGED_RE = /%window-pane-changed @(\d+) %(\d+)/
+
+function windowPaneChangedAction (message) {
+  const match = message.match(WINDOW_PANE_CHANGED_RE);
+
+  const [_, windowNumber, paneNumber] = match;
+
+  return {
+    type: 'WINDOW_PANE_CHANGED',
+
+    windowNumber: parseInt(windowNumber, 10),
+    paneNumber: parseInt(paneNumber, 10)
+  }
+}
+
 function keyEventToAction (event) {
   const key = parseInputEvent(event);
 
@@ -223,6 +238,12 @@ const reducers = {
     state.terminals[action.paneNumber].browsing = null;
 
     return state;
+  },
+
+  WINDOW_PANE_CHANGED (state, action) {
+    state.activePane = action.paneNumber;
+
+    return state;
   }
 };
 
@@ -260,6 +281,10 @@ function main ({DOM, Tmux, Resize}) {
     .filter(message => message.startsWith('%update-binds'))
     .map(updateBindsToAction);
 
+  const windowPaneChanged$ = Tmux
+    .filter(message => message.startsWith('%window-pane-changed'))
+    .map(windowPaneChangedAction);
+
   const keydownAction$ = DOM
     .select('document')
     .events('keydown')
@@ -271,6 +296,7 @@ function main ({DOM, Tmux, Resize}) {
     .map(closeBrowserEventToAction);
 
   const initialState = {
+    activePane: null,
     terminals: {},
     layout: null,
     leaderPressed: false,
@@ -285,7 +311,8 @@ function main ({DOM, Tmux, Resize}) {
     updateBindsAction$,
     keydownAction$,
     closeBrowser$,
-    pasteAction$
+    pasteAction$,
+    windowPaneChanged$
   );
 
   const state$ = action$.fold(update, initialState);
@@ -370,6 +397,9 @@ function renderPane (state, pane) {
     pre('.pane', {
       key: `pane-${pane.number}`,
       style,
+      class: {
+        active: state.activePane === pane.number
+      },
       attrs: {
         'data-number': pane.number
       }
