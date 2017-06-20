@@ -1,6 +1,6 @@
 node_modules/
 npm-debug.log
-static/bundle.js
+static/bundle.js*
 
 .swp
 lib/*

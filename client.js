@@ -1,17 +1,13 @@
 import {run} from '@cycle/xstream-run';
-import {makeDOMDriver, pre, div, h, input, button, span} from '@cycle/dom';
-import _ from 'lodash';
-import Terminal from 'terminal.js';
-import TerminalHTMLOutput from 'terminal.js/lib/output/html';
+import {makeDOMDriver,} from '@cycle/dom';
 import xs from 'xstream';
 import fromEvent from 'xstream/extra/fromEvent';
 import debounce from 'xstream/extra/debounce';
 import dropRepeats from 'xstream/extra/dropRepeats';
 
-import parseTmuxLayout from './src/parse-layout';
-import parseBinds from './src/parse-binds';
-
-const COLORS = new TerminalHTMLOutput().colors;
+import {cake} from './cake';
+import features from './src/features';
+import {view} from './src/view';
 
 function resizeDriver () {
   return fromEvent(window, 'resize');
@@ -43,234 +39,21 @@ function tmuxDriver (sink$, streamAdapter) {
   return stream;
 }
 
-function readyOutput (output) {
-  return output
-    .replace(/\\(\d{3})/g, (_, match) => String.fromCharCode(parseInt(match, 8)))
-    .replace(/\033k\w+/, '');
-}
-
-function outputMessageToAction (message) {
-  const [_, paneNumber, ...output] = message.split(' '); // eslint-disable-line no-unused-vars
-
-  return {
-    type: 'OUTPUT',
-
-    paneNumber: paneNumber.replace('%', ''),
-    output: readyOutput(output.join(' '))
-  };
-}
-
-function updateLayoutToAction (message) {
-  const [_, ...layoutDetails] = message.split(' '); // eslint-disable-line no-unused-vars
-
-  return {
-    type: 'UPDATE_LAYOUT',
-
-    newLayout: parseTmuxLayout(layoutDetails.join(' '))
-  };
-}
-
-function updateBindsToAction (message) {
-  message = message.replace('%update-binds ');
-
-  return {
-    type: 'UPDATE_BINDS',
-
-    newBinds: parseBinds(message)
-  };
-}
-
-function keyEventToAction (event) {
-  const key = parseInputEvent(event);
-
-  return {
-    type: 'KEY_INPUT',
-
-    key,
-
-    isLeader: key === 'C-Space'
-  };
-}
-
-function closeBrowserEventToAction (event) {
-  const browserElement = findParent(event.target, '.browser');
-  const paneNumber = browserElement.dataset.number;
-
-  return {
-    type: 'CLOSE_BROWSER',
-
-    paneNumber
-  };
-}
-
-function pasteEventToAction (event) {
-  return {
-    type: 'PASTE',
-
-    paste: event.clipboardData.getData('text/plain')
-  }
-}
-
-function findParent (element, className) {
-  if (!element.parentElement) {
-    return null;
-  }
-
-  if (element.parentElement.classList.contains(className.replace(/^\./, ''))) {
-    return element.parentElement;
-  }
-
-  return findParent(element.parentElement, className);
-}
-
-const reducers = {
-  OUTPUT (state, action) {
-    let terminal = state.terminals[action.paneNumber];
-
-    if (!terminal) {
-      terminal = state.terminals[action.paneNumber] = new Terminal();
+function update (reducers) {
+  return function update (state, action) {
+    if (!reducers[action.type]) {
+      throw new Error('write a reducer for ' + action.type + '\n' + JSON.stringify(action));
     }
 
-    const urlToBrowseRegex = /\033browse ([^\033]*)/;
-    const urlToBrowse = action.output.match(urlToBrowseRegex);
-
-    if (urlToBrowse) {
-      state.terminals[action.paneNumber].browsing = urlToBrowse[1];
-
-      return state;
-    }
-
-    terminal.write(action.output);
-
-    return state;
-  },
-
-  PASTE (state, action) {
-    return Object.assign({}, state, {
-      messageCount: state.messageCount + 1,
-      messages: [
-        `send-keys \"${action.paste}\"`
-      ],
-      leaderPressed: false
-    });
-  },
-
-  UPDATE_LAYOUT (state, action) {
-    state.layout = action.newLayout;
-
-    const panes = findPanes(state.layout);
-
-    panes.forEach(pane => {
-      let terminal = state.terminals[pane.number];
-
-      if (!terminal) {
-        terminal = state.terminals[pane.number] = new Terminal();
-      }
-
-      terminal.state.resize({rows: pane.rows, columns: pane.columns});
-    });
-
-    return state;
-  },
-
-  KEY_INPUT (state, action) {
-    if (action.isLeader) {
-      state.leaderPressed = true;
-
-      return state;
-    }
-
-    const bind = state.binds.find(bind => {
-      const rightKey = bind.key === action.key;
-      const root = bind.type === 'root';
-      const leader = state.leaderPressed && bind.type === 'prefix';
-
-      return rightKey && (root || leader);
-    });
-
-    if (bind) {
-      return Object.assign({}, state, {
-        messageCount: state.messageCount + 1,
-
-        messages: [
-          bind.command
-        ],
-
-        leaderPressed: false
-      });
-    }
-
-    if (action.key === undefined) {
-      return state;
-    }
-
-    return Object.assign({}, state, {
-      messageCount: state.messageCount + 1,
-      messages: [
-        `send-keys ${sanitizeSendKeys(action.key)}`
-      ],
-      leaderPressed: false
-    });
-  },
-
-  UPDATE_BINDS (state, action) {
-    state.binds = action.newBinds;
-
-    return state;
-  },
-
-  CLOSE_BROWSER (state, action) {
-    state.terminals[action.paneNumber].browsing = null;
-
-    return state;
+    return reducers[action.type](state, action);
   }
-};
-
-function findPanes (layout) {
-  if (layout.type === 'pane') {
-    return [layout];
-  }
-
-  return _.flatten(layout.children.map(findPanes));
 }
 
-function update (state, action) {
-  if (!reducers[action.type]) {
-    throw new Error('write a reducer for ' + action.type + '\n' + JSON.stringify(action));
-  }
-
-  return reducers[action.type](state, action);
-}
-
-function main ({DOM, Tmux, Resize}) {
-  const pasteAction$ = DOM
-    .select('document')
-    .events('paste')
-    .map(pasteEventToAction);
-
-  const outputAction$ = Tmux
-    .filter(message => message.startsWith('%output'))
-    .map(outputMessageToAction);
-
-  const updateLayoutAction$ = Tmux
-    .filter(message => message.startsWith('%layout-change'))
-    .map(updateLayoutToAction);
-
-  const updateBindsAction$ = Tmux
-    .filter(message => message.startsWith('%update-binds'))
-    .map(updateBindsToAction);
-
-  const keydownAction$ = DOM
-    .select('document')
-    .events('keydown')
-    .map(keyEventToAction);
-
-  const closeBrowser$ = DOM
-    .select('.browser .close')
-    .events('click')
-    .map(closeBrowserEventToAction);
+function main (sources) {
+  const {DOM, Tmux, Resize} = sources;
 
   const initialState = {
+    activePane: null,
     terminals: {},
     layout: null,
     leaderPressed: false,
@@ -279,16 +62,9 @@ function main ({DOM, Tmux, Resize}) {
     binds: []
   };
 
-  const action$ = xs.merge(
-    outputAction$,
-    updateLayoutAction$,
-    updateBindsAction$,
-    keydownAction$,
-    closeBrowser$,
-    pasteAction$
-  );
+  const {reducers, action$} = cake(features, sources);
 
-  const state$ = action$.fold(update, initialState);
+  const state$ = action$.fold(update(reducers), initialState);
 
   const focusPane$ = DOM
     .select('.pane')
@@ -318,195 +94,6 @@ function main ({DOM, Tmux, Resize}) {
   };
 }
 
-function view (state) {
-  if (!state.layout) {
-    return pre('Connecting to tmux...');
-  }
-
-  return renderLayout(state, state.layout);
-}
-
-function renderLayout (state, layout) {
-  if (layout.type === 'pane') {
-    return renderPane(state, layout);
-  } else if (layout.type === 'container') {
-    return renderContainer(state, layout);
-  }
-
-  throw new Error('Invalid layout type: ' + JSON.stringify(layout));
-}
-
-function renderPane (state, pane) {
-  const style = {
-    width: `${pane.width}vw`,
-    height: `${pane.height}vh`
-  };
-
-  const urlToBrowse = state.terminals[pane.number].browsing;
-
-  if (urlToBrowse) {
-    return (
-      div('.browser', {attrs: {'data-number': pane.number}}, [
-        div('.controls', [
-          button('.close', 'Close'),
-          input({attrs: {value: urlToBrowse}}),
-          button('.back', 'Back'),
-          button('.forward', 'Forward')
-        ]),
-
-        h('webview', {
-          key: `webview-${pane.number}`,
-          style,
-          attrs: {
-            'data-number': pane.number,
-            src: state.terminals[pane.number].browsing
-          }
-        })
-      ])
-    );
-  }
-
-  return (
-    pre('.pane', {
-      key: `pane-${pane.number}`,
-      style,
-      attrs: {
-        'data-number': pane.number
-      }
-    }, [renderTerminal(state.terminals[pane.number])])
-  );
-}
-
-function renderTerminal (terminal) {
-  const lines = _.range(terminal.state.rows).map(terminal.state.getLine.bind(terminal.state));
-
-  return (
-    div('.terminal', lines.map((line, index) => renderTerminalLine(terminal, line, index)))
-  );
-}
-
-function addSegment (state) {
-  const previousAttr = state.currentInfo;
-
-  if (state.currentSegment !== '') {
-    const style = {
-      background: COLORS[previousAttr.bg],
-      color: COLORS[previousAttr.fg]
-    };
-
-    state.segments.push(
-      span(
-        '.line-segment',
-        {style}, // todo - key
-        state.currentSegment
-      )
-    );
-  }
-
-  state.currentSegment = '';
-
-  return state;
-}
-
-function lineIntoSegments (terminal, line, state, character, index, cursorIndex) {
-  const characterIsCursor = index === cursorIndex;
-
-  if (characterIsCursor) {
-    state = addSegment(state);
-
-    const cursorCharacter = character.trim() === ''
-      ? ' '
-      : character;
-
-    state.segments.push(
-      span(
-        '.line-segment.cursor',
-        {key: 'cursor'},
-        cursorCharacter
-      )
-    );
-  }
-
-  if (index in line.attr || character === '\n') {
-    state = addSegment(state);
-
-    state.currentInfo = line.attr[index];
-  }
-
-  if (!characterIsCursor) {
-    state.currentSegment += character;
-  }
-
-  return state;
-}
-
-function renderTerminalLine (terminal, line, index) {
-  const initialSegmentsState = {
-    segments: [],
-    currentSegment: '',
-    currentInfo: null
-  };
-
-  const cursorIndex = terminal.state.cursor.y === index
-    ? terminal.state.cursor.x
-    : null;
-
-  const {segments} = line.str.split('').concat('\n').reduce(
-    (state, character, index) => lineIntoSegments(terminal, line, state, character, index, cursorIndex),
-    initialSegmentsState
-  );
-
-  return (
-    div('.terminal-line', {key: index}, segments)
-  );
-}
-
-function divider (container) {
-  let style;
-
-  if (container.direction === 'row') {
-    style = {
-      width: '10px',
-      height: `${container.height}vh`
-    };
-  } else {
-    style = {
-      width: `${container.width}vw`,
-      height: '10px'
-    };
-  }
-
-  return (
-    div('.divider', {style})
-  );
-}
-
-function renderContainer (state, container) {
-  const style = {
-    display: 'flex',
-    'flex-direction': container.direction,
-    width: `${container.width}vw`,
-    height: `${container.height}vh`
-  };
-
-  const childrenWithDividers = _.flatten(
-    container.children.map((layout, index) => {
-      if (index === 0) {
-        return renderLayout(state, layout);
-      }
-
-      return [
-        divider(container),
-        renderLayout(state, layout)
-      ];
-    })
-  );
-
-  return (
-    div('.container', {style}, childrenWithDividers)
-  );
-}
-
 function updateTerminalSize () {
   const columns = Math.floor(window.innerWidth / 9.6); // this is a hack, (values precomputed for the font "Hack")
   const rows = Math.floor(window.innerHeight / 18.9);
@@ -518,73 +105,6 @@ function focusPane (event) {
   const paneNumber = event.currentTarget.dataset.number;
 
   return `select-pane -t %${paneNumber}`;
-}
-
-function sanitizeSendKeys (keyToSend) {
-  if (keyToSend === '$') {
-    return '"\\$"';
-  }
-
-  if (keyToSend === ';') {
-    return '"\\\\;"';
-  }
-
-  const charactersToSanitize = [
-    '#',
-    "'",
-    '"',
-    ';'
-  ];
-
-  if (!charactersToSanitize.includes(keyToSend)) {
-    return keyToSend;
-  }
-
-  return JSON.stringify(keyToSend);
-}
-
-function parseInputEvent (event) {
-  //event.preventDefault();
-
-  let keyToSend = event.key;
-
-  if (keyToSend === 'Backspace') {
-    keyToSend = 'BSpace';
-  }
-
-  if (keyToSend === ' ') {
-    keyToSend = 'Space';
-  }
-
-  if (keyToSend === 'Control' || keyToSend === 'Shift' || keyToSend === 'Meta' || keyToSend === 'Alt') {
-    return;
-  }
-
-  if (keyToSend.startsWith('Arrow')) {
-    keyToSend = keyToSend.replace('Arrow', '');
-  }
-
-  if (event.ctrlKey && event.shiftKey && event.keyToSend === 'C') {
-    return;
-  }
-
-  if (event.ctrlKey) {
-    keyToSend = `C-${keyToSend}`;
-  }
-
-  if (event.metaKey) {
-    keyToSend = `M-${keyToSend}`;
-  }
-
-  if (keyToSend === "~") {
-    keyToSend = JSON.stringify(keyToSend);
-  }
-
-  if (keyToSend === 'C-a') {
-    event.preventDefault();
-  }
-
-  return keyToSend;
 }
 
 const drivers = {

@@ -18,9 +18,11 @@ pre {
   font-family: "Hack";
   color: white;
   background: #122;
+  border: 2px solid #122;
   margin: 0;
   height: 100%;
   line-height: 20px;
+  box-sizing: border-box;
 }
 
 .terminal-line {
@@ -28,7 +30,7 @@ pre {
 }
 
 .active {
-  border: 1px solid rebeccapurple;
+  border: 2px solid #19546f;
 }
 
 .divider {
