@@ -27,6 +27,7 @@ pre {
 
 .terminal-line {
   margin: -1px 0px;
+  min-height: 20px;
 }
 
 .active {
