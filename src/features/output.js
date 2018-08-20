@@ -1,3 +1,5 @@
+import Terminal from 'terminal.js'
+
 function readyOutput (output) {
   return output
     .replace(/\\(\d{3})/g, (_, match) => String.fromCharCode(parseInt(match, 8)))

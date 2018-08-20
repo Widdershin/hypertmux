@@ -17,6 +17,7 @@ export function paste (sources) {
       return Object.assign({}, state, {
         messageCount: state.messageCount + 1,
         messages: [
+          // TODO - escape this
           `send-keys \"${action.paste}\"`
         ],
         leaderPressed: false
